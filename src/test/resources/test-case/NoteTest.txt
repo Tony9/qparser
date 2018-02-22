@@ -1,0 +1,51 @@
+[new root]
+ .
+
+[add a to root]
+ .
+ └─ a
+
+[add b to root]
+ .
+ ├─ a
+ └─ b
+
+[add a1 to a]
+ .
+ ├─ a
+ │  └─ a1
+ └─ b
+
+[add a2 to a]
+ .
+ ├─ a
+ │  ├─ a1
+ │  └─ a2
+ └─ b
+
+[add a21 to a2]
+ .
+ ├─ a
+ │  ├─ a1
+ │  └─ a2
+ │     └─ a21
+ └─ b
+
+[add a211 to a21]
+ .
+ ├─ a
+ │  ├─ a1
+ │  └─ a2
+ │     └─ a21
+ │        └─ a211
+ └─ b
+
+[add b1 to b]
+ .
+ ├─ a
+ │  ├─ a1
+ │  └─ a2
+ │     └─ a21
+ │        └─ a211
+ └─ b
+    └─ b1

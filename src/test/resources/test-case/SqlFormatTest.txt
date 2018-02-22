@@ -1,0 +1,85 @@
+--简单: SELECT
+select a.* from a as A, b
+;
+
+SELECT
+>>a.*
+FROM
+>>a AS A,
+>>b
+;
+
+--简单: SELECT
+select * from a,b left join c on 1=1 and 1>2
+;
+
+SELECT
+>>*
+FROM
+>>a,
+>>b
+LEFT JOIN
+>>c
+>>ON
+>>>>1=1
+>>>>AND 1>2
+;
+
+--复杂: SELECT
+select
+  1,2,3,sum(x) as x
+from a,b
+join x on f(a,b,1)<=1 or g(x)/g(y)>0.1
+left join c on 1=1 and 1>2
+group by 1,2,3
+order by 1 asc, 2 DESC
+limit 10
+;
+
+SELECT
+>>1,
+>>2,
+>>3,
+>>sum(x) AS x
+FROM
+>>a,
+>>b
+JOIN
+>>x
+>>ON
+>>>>f(a,b,1)<=1
+>>>>OR g(x)/g(y)>0.1
+LEFT JOIN
+>>c
+>>ON 1=1
+>>>>AND 1>2
+GROUP BY
+>>1,
+>>2,
+>>3
+ORDER BY
+>>1 ASC,
+>>2 DESC
+LIMIT 10
+;
+
+--嵌套SQL
+select * from (select 1+x,f(y,z) as a from t) a,b left join c on 1=1 and 1>2
+;
+
+SELECT
+>>*
+FROM
+>>(
+>>>>SELECT
+>>>>>>1+x,
+>>>>>>f(y,z) AS a
+>>>>FROM t
+>>) a,
+>>b
+LEFT JOIN
+>>c
+>>ON
+>>>>1=1
+>>>>AND 1>2
+;
