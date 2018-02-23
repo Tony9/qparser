@@ -5,7 +5,7 @@ import java.util.List;
 
 public class Node<T> {
 
-    private Node parent;
+    private Node<T> parent;
     private NodeList<T> children;
     private T data;
 

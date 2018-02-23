@@ -2,34 +2,43 @@
 select 'a','b' from t
 
 [sql-010:simple:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  └─ 'a'
+ │  │  └─ `EXPR`
+ │  │     └─ 'a'
  │  └─ `COLUMN`
- │     └─ 'b'
+ │     └─ `EXPR`
+ │        └─ 'b'
  └─ `FROM`
     └─ `TABLE`
-       └─ t
+       └─ `NAME`
+          └─ t
 
 
 
 [sql-015:simple]
-SELECT 'a',b,'c' FROM t
+SELECT 'a' as a,b,'c' FROM t
 
 
 [sql-015:simple:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  └─ 'a'
+ │  │  ├─ `EXPR`
+ │  │  │  └─ 'a'
+ │  │  └─ `NAME`
+ │  │     └─ a
  │  ├─ `COLUMN`
- │  │  └─ b
+ │  │  └─ `EXPR`
+ │  │     └─ b
  │  └─ `COLUMN`
- │     └─ 'c'
+ │     └─ `EXPR`
+ │        └─ 'c'
  └─ `FROM`
     └─ `TABLE`
-       └─ t
+       └─ `NAME`
+          └─ t
 
 [sql-020:comment]
 /*TEST COMMENT*/
@@ -42,285 +51,287 @@ from t
  `STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  ├─ /*TEST COMMENT*/
- │  │  ├─ 'a'
- │  │  └─ --SingleLineComment
+ │  │  └─ `EXPR`
+ │  │     └─ 'a'
  │  └─ `COLUMN`
- │     └─ 'b'
+ │     └─ `EXPR`
+ │        └─ 'b'
  └─ `FROM`
     └─ `TABLE`
-       └─ t
+       └─ `NAME`
+          └─ t
 
-[sql-030:expression]
+
+[sql-030:EXPR]
 select 'a',substr(b, 1, 2),'c' from t
 
-[sql-030:expression:tree]
+[sql-030:EXPR:tree]
  `STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  └─ 'a'
+ │  │  └─ `EXPR`
+ │  │     └─ 'a'
  │  ├─ `COLUMN`
- │  │  ├─ substr
- │  │  ├─ (
- │  │  ├─ b
- │  │  ├─ ,
- │  │  ├─ 1
- │  │  ├─ ,
- │  │  ├─ 2
- │  │  └─ )
+ │  │  └─ `EXPR`
+ │  │     └─ substr ( b , 1 , 2 )
  │  └─ `COLUMN`
- │     └─ 'c'
+ │     └─ `EXPR`
+ │        └─ 'c'
  └─ `FROM`
     └─ `TABLE`
-       └─ t
+       └─ `NAME`
+          └─ t
 
-[sql-031:expression]
-select 'a',substr(f(b, 1), 2),'c' from t
+[sql-031:EXPR]
+select 'a',substr(f(b, 1), 2) as b,'c' from t
 
 
-[sql-031:expression:tree]
- `STATEMENT`
+[sql-031:EXPR:tree]
+`STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  └─ 'a'
+ │  │  └─ `EXPR`
+ │  │     └─ 'a'
  │  ├─ `COLUMN`
- │  │  ├─ substr
- │  │  ├─ (
- │  │  ├─ f
- │  │  ├─ (
- │  │  ├─ b
- │  │  ├─ ,
- │  │  ├─ 1
- │  │  ├─ )
- │  │  ├─ ,
- │  │  ├─ 2
- │  │  └─ )
+ │  │  ├─ `EXPR`
+ │  │  │  └─ substr ( f ( b , 1 ) , 2 )
+ │  │  └─ `NAME`
+ │  │     └─ b
  │  └─ `COLUMN`
- │     └─ 'c'
+ │     └─ `EXPR`
+ │        └─ 'c'
  └─ `FROM`
     └─ `TABLE`
-       └─ t
+       └─ `NAME`
+          └─ t
 
 [sql-040:join]
-select x,y from t left join t1 on 1=1 right join t2 on 1>2 and 1<3
+select
+  x,sum(y) as y
+from t
+left join t1
+  on 1=1
+right join t2
+  on 1>2 and 1<3
+where 1=1 or 1=2
+group     by 1,       f(x)
+order by 1 asc, 2 desc
+
 
 [sql-040:join:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  └─ x
+ │  │  └─ `EXPR`
+ │  │     └─ x
  │  └─ `COLUMN`
- │     └─ y
+ │     ├─ `EXPR`
+ │     │  └─ sum ( y )
+ │     └─ `NAME`
+ │        └─ y
  ├─ `FROM`
  │  └─ `TABLE`
- │     └─ t
- ├─ `LEFT`
- ├─ `JOIN`
- │  └─ `TABLE`
- │     └─ t1
- ├─ `ON`
- │  └─ `EXPRESSION`
- │     ├─ 1
- │     ├─ =
- │     └─ 1
- ├─ `RIGHT`
- ├─ `JOIN`
- │  └─ `TABLE`
- │     └─ t2
- ├─ `ON`
- │  └─ `EXPRESSION`
- │     ├─ 1
- │     ├─ >
- │     └─ 2
- └─ `AND`
-    └─ `EXPRESSION`
-       ├─ 1
-       ├─ <
-       └─ 3
+ │     └─ `NAME`
+ │        └─ t
+ ├─ `LEFT-JOIN`
+ │  ├─ `TABLE`
+ │  │  └─ `NAME`
+ │  │     └─ t1
+ │  └─ `ON`
+ │     └─ 1 = 1
+ ├─ `RIGHT-JOIN`
+ │  ├─ `TABLE`
+ │  │  └─ `NAME`
+ │  │     └─ t2
+ │  └─ `ON`
+ │     └─ 1 > 2 and 1 < 3
+ ├─ `WHERE`
+ │  └─ 1 = 1 or 1 = 2
+ ├─ `GROUP-BY`
+ │  ├─ `EXPR`
+ │  │  └─ 1
+ │  └─ `EXPR`
+ │     └─ f ( x )
+ └─ `ORDER-BY`
+    ├─ `EXPR`
+    │  └─ 1 asc
+    └─ `EXPR`
+       └─ 2 desc
 
 [sql-050:subquery]
 select a from (select b from t2) t1
 
 [sql-050:subquery:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  └─ `COLUMN`
- │     └─ a
+ │     └─ `EXPR`
+ │        └─ a
  └─ `FROM`
     └─ `TABLE`
        ├─ `STATEMENT`
        │  ├─ `SELECT`
        │  │  └─ `COLUMN`
-       │  │     └─ b
+       │  │     └─ `EXPR`
+       │  │        └─ b
        │  └─ `FROM`
        │     └─ `TABLE`
-       │        └─ t2
-       └─ t1
+       │        └─ `NAME`
+       │           └─ t2
+       └─ `NAME`
+          └─ t1
 
 [sql-060:sub-query]
 select a from (select b from (select c from t1) t2) t3
 
 [sql-060:sub-query:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  └─ `COLUMN`
- │     └─ a
+ │     └─ `EXPR`
+ │        └─ a
  └─ `FROM`
     └─ `TABLE`
        ├─ `STATEMENT`
        │  ├─ `SELECT`
        │  │  └─ `COLUMN`
-       │  │     └─ b
+       │  │     └─ `EXPR`
+       │  │        └─ b
        │  └─ `FROM`
        │     └─ `TABLE`
        │        ├─ `STATEMENT`
        │        │  ├─ `SELECT`
        │        │  │  └─ `COLUMN`
-       │        │  │     └─ c
+       │        │  │     └─ `EXPR`
+       │        │  │        └─ c
        │        │  └─ `FROM`
        │        │     └─ `TABLE`
-       │        │        └─ t1
-       │        └─ t2
-       └─ t3
+       │        │        └─ `NAME`
+       │        │           └─ t1
+       │        └─ `NAME`
+       │           └─ t2
+       └─ `NAME`
+          └─ t3
 
 
 
 
 [sql-065:sub-query]
-select * from ( select (a+1) as a from t) t1, (select b+f(x,y) as b from (select c from t3) t2) t2 where 1=1
+select * from ( select (a+1) as a from t) t1, (select b+f(x,y) as b from (select c from t3) t2) t2 where (1=1 or 1=3) and name like '%'
 
 [sql-065:sub-query:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  └─ `COLUMN`
- │     └─ *
+ │     └─ `EXPR`
+ │        └─ *
  ├─ `FROM`
  │  ├─ `TABLE`
  │  │  ├─ `STATEMENT`
  │  │  │  ├─ `SELECT`
  │  │  │  │  └─ `COLUMN`
- │  │  │  │     ├─ (
- │  │  │  │     ├─ a
- │  │  │  │     ├─ +
- │  │  │  │     ├─ 1
- │  │  │  │     ├─ )
- │  │  │  │     ├─ as
- │  │  │  │     └─ a
+ │  │  │  │     ├─ `EXPR`
+ │  │  │  │     │  └─ ( a + 1 )
+ │  │  │  │     └─ `NAME`
+ │  │  │  │        └─ a
  │  │  │  └─ `FROM`
  │  │  │     └─ `TABLE`
- │  │  │        └─ t
- │  │  └─ t1
+ │  │  │        └─ `NAME`
+ │  │  │           └─ t
+ │  │  └─ `NAME`
+ │  │     └─ t1
  │  └─ `TABLE`
  │     ├─ `STATEMENT`
  │     │  ├─ `SELECT`
  │     │  │  └─ `COLUMN`
- │     │  │     ├─ b
- │     │  │     ├─ +
- │     │  │     ├─ f
- │     │  │     ├─ (
- │     │  │     ├─ x
- │     │  │     ├─ ,
- │     │  │     ├─ y
- │     │  │     ├─ )
- │     │  │     ├─ as
- │     │  │     └─ b
+ │     │  │     ├─ `EXPR`
+ │     │  │     │  └─ b + f ( x , y )
+ │     │  │     └─ `NAME`
+ │     │  │        └─ b
  │     │  └─ `FROM`
  │     │     └─ `TABLE`
  │     │        ├─ `STATEMENT`
  │     │        │  ├─ `SELECT`
  │     │        │  │  └─ `COLUMN`
- │     │        │  │     └─ c
+ │     │        │  │     └─ `EXPR`
+ │     │        │  │        └─ c
  │     │        │  └─ `FROM`
  │     │        │     └─ `TABLE`
- │     │        │        └─ t3
- │     │        └─ t2
- │     └─ t2
+ │     │        │        └─ `NAME`
+ │     │        │           └─ t3
+ │     │        └─ `NAME`
+ │     │           └─ t2
+ │     └─ `NAME`
+ │        └─ t2
  └─ `WHERE`
-    └─ `EXPRESSION`
-       ├─ 1
-       ├─ =
-       └─ 1
+    └─ ( 1 = 1 or 1 = 3 ) and name like '%'
 
 [sql-070:case-when]
-select (a+1) as a, b, (case when a=1 then 1 when a=2 then 2 else 0 end) as c from (select b+f(x,g(y,z)) as b, c as c from (select c from t1) t2) t3
+select
+  (a+1) as a,
+   b,
+   (case when a=1 then 1 when a=2 then 2 else 0 end) as c
+  from (
+    select
+      b+f(x,g(y,z)) as b, c as c
+    from (
+      select c from t1
+     ) t2
+  ) t3
 
 [sql-070:case-when:tree]
- `STATEMENT`
+`STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
- │  │  ├─ (
- │  │  ├─ a
- │  │  ├─ +
- │  │  ├─ 1
- │  │  ├─ )
- │  │  ├─ as
- │  │  └─ a
+ │  │  ├─ `EXPR`
+ │  │  │  └─ ( a + 1 )
+ │  │  └─ `NAME`
+ │  │     └─ a
  │  ├─ `COLUMN`
- │  │  └─ b
+ │  │  └─ `EXPR`
+ │  │     └─ b
  │  └─ `COLUMN`
- │     ├─ (
- │     ├─ case
- │     ├─ when
- │     ├─ a
- │     ├─ =
- │     ├─ 1
- │     ├─ then
- │     ├─ 1
- │     ├─ when
- │     ├─ a
- │     ├─ =
- │     ├─ 2
- │     ├─ then
- │     ├─ 2
- │     ├─ else
- │     ├─ 0
- │     ├─ end
- │     ├─ )
- │     ├─ as
- │     └─ c
+ │     ├─ `EXPR`
+ │     │  └─ ( case when a = 1 then 1 when a = 2 then 2 else 0 end )
+ │     └─ `NAME`
+ │        └─ c
  └─ `FROM`
     └─ `TABLE`
        ├─ `STATEMENT`
        │  ├─ `SELECT`
        │  │  ├─ `COLUMN`
-       │  │  │  ├─ b
-       │  │  │  ├─ +
-       │  │  │  ├─ f
-       │  │  │  ├─ (
-       │  │  │  ├─ x
-       │  │  │  ├─ ,
-       │  │  │  ├─ g
-       │  │  │  ├─ (
-       │  │  │  ├─ y
-       │  │  │  ├─ ,
-       │  │  │  ├─ z
-       │  │  │  ├─ )
-       │  │  │  ├─ )
-       │  │  │  ├─ as
-       │  │  │  └─ b
+       │  │  │  ├─ `EXPR`
+       │  │  │  │  └─ b + f ( x , g ( y , z ) )
+       │  │  │  └─ `NAME`
+       │  │  │     └─ b
        │  │  └─ `COLUMN`
-       │  │     ├─ c
-       │  │     ├─ as
-       │  │     └─ c
+       │  │     ├─ `EXPR`
+       │  │     │  └─ c
+       │  │     └─ `NAME`
+       │  │        └─ c
        │  └─ `FROM`
        │     └─ `TABLE`
        │        ├─ `STATEMENT`
        │        │  ├─ `SELECT`
        │        │  │  └─ `COLUMN`
-       │        │  │     └─ c
+       │        │  │     └─ `EXPR`
+       │        │  │        └─ c
        │        │  └─ `FROM`
        │        │     └─ `TABLE`
-       │        │        └─ t1
-       │        └─ t2
-       └─ t3
+       │        │        └─ `NAME`
+       │        │           └─ t1
+       │        └─ `NAME`
+       │           └─ t2
+       └─ `NAME`
+          └─ t3
 
-[sql-080:with-query]
-with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) select * from t1,t2
+## [sql-080:with-query]
+## with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) select * from t1,t2
 
 [sql-080:with-query:tree]
  `STATEMENT`
  ├─ `WITH`
- │  ├─ `EXPRESSION`
+ │  ├─ `EXPR`
  │  │  ├─ t1
  │  │  ├─ as
  │  │  └─ `STATEMENT`
@@ -336,7 +347,7 @@ with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) sel
  │  │     └─ `FROM`
  │  │        └─ `TABLE`
  │  │           └─ t
- │  └─ `EXPRESSION`
+ │  └─ `EXPR`
  │     ├─ t2
  │     ├─ as
  │     └─ `STATEMENT`
@@ -369,33 +380,30 @@ with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) sel
 
 [sql-100:create]
 create    table xxx as (
-  select #a,substr(b, #start, #end),'select * from t' from t
+  select #a,substr(b, #start, #end), 'select * from t', rank(a partition  b) from t
 )with data
 
 [sql-100:create:tree]
- `STATEMENT`
- ├─ `CREATE`
- ├─ `TABLE`
- │  └─ `EXPRESSION`
- │     ├─ xxx
- │     ├─ as
- │     └─ `STATEMENT`
- │        ├─ `SELECT`
- │        │  ├─ `COLUMN`
- │        │  │  └─ #a
- │        │  ├─ `COLUMN`
- │        │  │  ├─ substr
- │        │  │  ├─ (
- │        │  │  ├─ b
- │        │  │  ├─ ,
- │        │  │  ├─ #start
- │        │  │  ├─ ,
- │        │  │  ├─ #end
- │        │  │  └─ )
- │        │  └─ `COLUMN`
- │        │     └─ 'select * from t'
- │        └─ `FROM`
- │           └─ `TABLE`
+`STATEMENT`
+ ├─ `CREATE-TABLE`
+ │  ├─ `NAME`
+ │  │  └─ xxx
+ │  └─ `STATEMENT`
+ │     ├─ `SELECT`
+ │     │  ├─ `COLUMN`
+ │     │  │  └─ `EXPR`
+ │     │  │     └─ #a
+ │     │  ├─ `COLUMN`
+ │     │  │  └─ `EXPR`
+ │     │  │     └─ substr ( b , #start , #end )
+ │     │  ├─ `COLUMN`
+ │     │  │  └─ `EXPR`
+ │     │  │     └─ 'select * from t'
+ │     │  └─ `COLUMN`
+ │     │     └─ `EXPR`
+ │     │        └─ rank ( a partition b )
+ │     └─ `FROM`
+ │        └─ `TABLE`
+ │           └─ `NAME`
  │              └─ t
- ├─ `WITH`
- └─ `DATA`
+ └─ `WITH-DATA`

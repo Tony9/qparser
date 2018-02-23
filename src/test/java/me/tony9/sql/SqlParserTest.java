@@ -71,7 +71,17 @@ public class SqlParserTest extends TestCase {
                 .filter(map -> map.getKey().endsWith(":tree]"))
                 .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
 
-        for (String key: sqls.keySet()) {
+        Set<String> keySet = sqls.keySet();
+        String[] keys = keySet.toArray(new String[keySet.size()]);
+        Arrays.sort(keys);
+
+        for (String key: keys) {
+
+            logger.info(String.format("%s", key));
+
+//            if (!key.startsWith("[sql-050:")) {
+//                continue;
+//            }
 
             String sql = sqls.get(key);
             Node node = new SqlParser().parse(sql);
@@ -80,10 +90,11 @@ public class SqlParserTest extends TestCase {
 
             String expected = trees.get(String.format("[%s:tree]", key.substring(1, key.length()-1)));
 
-            logger.info(String.format("\n%s\n[%s:tree]\n %s",
+            logger.info(String.format("\n%s\n[%s:tree]\n %s\n[%s:tree]",
                     sql.replaceAll("(\r|\n)+", " "),
                     key.substring(1, key.length()-1),
-                    actual));
+                    actual,
+                    key.substring(1, key.length()-1)));
             Assert.assertEquals(expected.toString().trim(), actual.toString().trim());
         }
     }
@@ -95,7 +106,7 @@ public class SqlParserTest extends TestCase {
     public void test_数据表() {
 
         String[][] tests = new String[][] {
-                new String[] {"select * from a as A, b", "[a, b]"},
+                new String[] {"select * from a, b", "[a, b]"},
                 new String[] {"select * from a,b join c on 1=1", "[a, b, c]"},
                 new String[] {"select (a+1) as a, b, (case when a=1 then 1 when a=2 then 2 else 0 end) as c from (select b+f(x,g(y,z)) as b, c as c from (select c from t1) t2) t3", "[t1]"},
         };
@@ -107,14 +118,15 @@ public class SqlParserTest extends TestCase {
 
             String tree = node.toTreeString();
 
-            logger.info(String.format("\n%s\n %s",
-                    sql.replaceAll("(\r|\n)+", " "),
-                    tree));
-
             final List<String> tables = new ArrayList<String>();
 
             node.getAllChildren().stream()
-                    .filter(n -> n.toString().equals("`TABLE`"))
+                    .filter(t -> {
+                        Node n = (Node)t;
+                        return n.toString().equals("`NAME`")
+                                && n.getParent().toString().equals("`TABLE`")
+                                && !n.getParent().getChildren().get(0).toString().equals("`STATEMENT`");
+                    })
                     .forEach(n -> {
                         Node t = (Node)n;
                         Node tableNameNode = t.getChildren().get(0);
@@ -128,14 +140,16 @@ public class SqlParserTest extends TestCase {
 
             String expected = tests[i][1];
 
-            logger.info("\n\n" + sql);
+            logger.info(String.format("\n%s\n %s",
+                    sql.replaceAll("(\r|\n)+", " "),
+                    tree));
             Assert.assertEquals(expected.toString(), actual.toString());
         }
     }
 
     public void test_查询语句的返回列() {
         String[][] tests = new String[][] {
-                new String[] {"select x, y as y1, f(x,y,0) as z from a as A, b", "[x, y1, z]"},
+                new String[] {"select x as x, y as y1, f(x,y,0) as z from a as A, b", "[x, y1, z]"},
                 new String[] {"select (a+1) as a2, b2, (case when a=1 then 1 when a=2 then 2 else 0 end) as c2 from (select b+f(x,g(y,z)) as b1, c as c1 from (select c from t1) t2) t3", "[a2, b2, c2]"},
         };
 
@@ -152,10 +166,21 @@ public class SqlParserTest extends TestCase {
 
             final List<String> columns = new ArrayList<String>();
 
-            node.getAllChildren().stream()
+            List<Node> nodes = node.getAllChildren();
+            nodes.stream()
                     .filter(n -> {
                         Node t = (Node)n;
-                        return t.toString().equals("`COLUMN`") && t.getParent().getParent().getParent() == null;
+                        boolean bColumnName = t.toString().equals("`NAME`")
+                                && t.getParent().toString().equals("`COLUMN`")
+                                && t.getParent().getParent().getParent().getParent() == null;
+
+                        boolean bColumnExpr = t.toString().equals("`EXPR`")
+                                && t.getParent().toString().equals("`COLUMN`")
+                                && t.getParent().getParent().getParent().getParent() == null
+                                && t.getParent().getChildren().size() == 1;
+
+                        return bColumnName || bColumnExpr;
+
                     })
                     .forEach(n -> {
                         Node t = (Node)n;

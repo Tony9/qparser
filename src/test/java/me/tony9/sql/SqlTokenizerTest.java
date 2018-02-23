@@ -57,7 +57,7 @@ public class SqlTokenizerTest extends TestCase {
 
         String[][] tests = new String[][] {
                 new String[] {"select 'a','b' from t", "[select / 'a' / , / 'b' / from / t]"},
-                new String[] {"/*TEST COMMENT*/select 'a' --SingleLineComment\n,'b' from t", "[/*TEST COMMENT*/ / select / 'a' / --SingleLineComment / , / 'b' / from / t]"},
+                new String[] {"/*TEST COMMENT*/select 'a' --SingleLineComment\n,'b' from t", "[select / 'a' / , / 'b' / from / t]"},
                 new String[] {" SELECT 'a',b,'c' FROM t", "[SELECT / 'a' / , / b / , / 'c' / FROM / t]"},
                 new String[] {"select 'a',substr(b, 1, 2),'c' from t", "[select / 'a' / , / substr / ( / b / , / 1 / , / 2 / ) / , / 'c' / from / t]"},
                 new String[] {"select x,y from t left join t1 on 1=1 right join t2 on 1>2 and 1<3", "[select / x / , / y / from / t / left / join / t1 / on / 1 / = / 1 / right / join / t2 / on / 1 / > / 2 / and / 1 / < / 3]"},
