@@ -380,7 +380,14 @@ a2, b2, c2
           └─ t3
 
 [sql-080:with-query]
-with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) select * from t1,t2
+with
+t1 as (
+  select (a+1) as a from t
+),
+t2 as (
+  select b+f(x,y) as b from t2
+)
+select * from t1,t2
 
 [sql-080:with-query:find-all-tables!]
 t, t2
@@ -388,52 +395,49 @@ t, t2
 [sql-080:with-query:result-columns!]
 *
 
-[sql-080:with-query:tree!]
- `STATEMENT`
+[sql-080:with-query:tree]
+`STATEMENT`
  ├─ `WITH`
- │  ├─ `EXPR`
- │  │  ├─ t1
- │  │  ├─ as
+ │  ├─ `WITH-SELECT`
+ │  │  ├─ `NAME`
+ │  │  │  └─ t1
  │  │  └─ `STATEMENT`
  │  │     ├─ `SELECT`
  │  │     │  └─ `COLUMN`
- │  │     │     ├─ (
- │  │     │     ├─ a
- │  │     │     ├─ +
- │  │     │     ├─ 1
- │  │     │     ├─ )
- │  │     │     ├─ as
- │  │     │     └─ a
+ │  │     │     ├─ `EXPR`
+ │  │     │     │  └─ ( a + 1 )
+ │  │     │     └─ `NAME`
+ │  │     │        └─ a
  │  │     └─ `FROM`
  │  │        └─ `TABLE`
- │  │           └─ t
- │  └─ `EXPR`
- │     ├─ t2
- │     ├─ as
+ │  │           └─ `NAME`
+ │  │              └─ t
+ │  └─ `WITH-SELECT`
+ │     ├─ `NAME`
+ │     │  └─ t2
  │     └─ `STATEMENT`
  │        ├─ `SELECT`
  │        │  └─ `COLUMN`
- │        │     ├─ b
- │        │     ├─ +
- │        │     ├─ f
- │        │     ├─ (
- │        │     ├─ x
- │        │     ├─ ,
- │        │     ├─ y
- │        │     ├─ )
- │        │     ├─ as
- │        │     └─ b
+ │        │     ├─ `EXPR`
+ │        │     │  └─ b + f ( x , y )
+ │        │     └─ `NAME`
+ │        │        └─ b
  │        └─ `FROM`
  │           └─ `TABLE`
- │              └─ t2
- ├─ `SELECT`
- │  └─ `COLUMN`
- │     └─ *
- └─ `FROM`
-    ├─ `TABLE`
-    │  └─ t1
-    └─ `TABLE`
-       └─ t2
+ │              └─ `NAME`
+ │                 └─ t2
+ └─ `STATEMENT`
+    ├─ `SELECT`
+    │  └─ `COLUMN`
+    │     └─ `EXPR`
+    │        └─ *
+    └─ `FROM`
+       ├─ `TABLE`
+       │  └─ `NAME`
+       │     └─ t1
+       └─ `TABLE`
+          └─ `NAME`
+             └─ t2
 
 
 

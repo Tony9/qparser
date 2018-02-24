@@ -14,6 +14,7 @@ public class SqlParser {
                 //Table
                 "CREATE TABLE WITH DATA",
                 "SELECT FROM [LEFT|RIGHT|INNER|OUTER] JOIN ON WHERE GROUP BY HAVING ORDER BY LIMIT UNION [ALL]",
+                "WITH SELECT FROM SELECT FROM SELECT FROM",
                 "INSERT INTO VALUES",
                 "DELETE FROM",
                 "DROP TABLE",
@@ -315,7 +316,12 @@ public class SqlParser {
             Token curToken = null;
             String keyword = curKeywordToken.toString();
             if ("`SELECT`".equals(keyword)) {
+
                 curToken = buildColumnNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`WITH`".equals(keyword)) {
+                curToken = buildWithNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
             } else if ("`FROM`".equals(keyword) || keyword.endsWith("JOIN`")) {
                 curToken = buildTableNode(curKeywordToken, nodeList);
@@ -343,7 +349,6 @@ public class SqlParser {
             } else {
                 throw new RuntimeException(String.format("Unsupported Keywords '%s'.", keyword));
             }
-
 
         }
 
@@ -409,6 +414,26 @@ public class SqlParser {
 
                 //append ColumnNode
                 curKeywordToken.addLast(columnNode);
+            }
+            return curKeywordToken;
+        }
+
+        private static Token buildWithNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+
+            for (List<SqlNode> nodes: nodeList) {
+
+                assert nodes.size() == 3;
+
+                //nodes: "name AS statement"
+                SqlNode withSelectNode = new SqlNode("`WITH-SELECT`");
+
+                SqlNode nameNode = new SqlNode("`NAME`");
+                nameNode.addLast(nodes.get(0));
+                withSelectNode.addLast(nameNode);
+
+                withSelectNode.addLast(nodes.get(2));
+                //append ColumnNode
+                curKeywordToken.addLast(withSelectNode);
             }
             return curKeywordToken;
         }
@@ -583,7 +608,26 @@ public class SqlParser {
 
             Statement statement = buildNestedStatement(sqlTokens);
             statement = buildNodes(statement);
-            return statement;
+
+            //fix with statement
+            if ("`WITH`".equals(statement.getChildren().get(0).toString())) {
+                NodeList<SqlNode> nodes = statement.getChildren();
+
+                Statement withStatement = new Statement();
+                withStatement.addLast(nodes.get(0));
+
+                Statement lastSelectStatement = new Statement();
+                for (int i = 1; i < nodes.size(); i ++) {
+                    lastSelectStatement.addLast(nodes.get(i));
+                }
+                withStatement.addLast(lastSelectStatement);
+
+                return withStatement;
+
+            } else {
+                return statement;
+            }
+
         }
     }
 }
