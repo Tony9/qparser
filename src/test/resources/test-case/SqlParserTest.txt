@@ -381,63 +381,72 @@ a2, b2, c2
 
 [sql-080:with-query]
 with
-t1 as (
-  select (a+1) as a from t
+t_x as (
+  select (a+1) as a from t1
 ),
-t2 as (
+t_y as (
   select b+f(x,y) as b from t2
 )
-select * from t1,t2
+select a,b,c from t_x,t_y,t1
 
 [sql-080:with-query:find-all-tables!]
-t, t2
+t1, t2
 
 [sql-080:with-query:result-columns!]
-*
+a, b, c
 
 [sql-080:with-query:tree]
 `STATEMENT`
- ├─ `WITH`
- │  ├─ `WITH-SELECT`
- │  │  ├─ `NAME`
- │  │  │  └─ t1
- │  │  └─ `STATEMENT`
- │  │     ├─ `SELECT`
- │  │     │  └─ `COLUMN`
- │  │     │     ├─ `EXPR`
- │  │     │     │  └─ ( a + 1 )
- │  │     │     └─ `NAME`
- │  │     │        └─ a
- │  │     └─ `FROM`
- │  │        └─ `TABLE`
- │  │           └─ `NAME`
- │  │              └─ t
- │  └─ `WITH-SELECT`
- │     ├─ `NAME`
- │     │  └─ t2
- │     └─ `STATEMENT`
- │        ├─ `SELECT`
- │        │  └─ `COLUMN`
- │        │     ├─ `EXPR`
- │        │     │  └─ b + f ( x , y )
- │        │     └─ `NAME`
- │        │        └─ b
- │        └─ `FROM`
- │           └─ `TABLE`
- │              └─ `NAME`
- │                 └─ t2
- └─ `STATEMENT`
-    ├─ `SELECT`
-    │  └─ `COLUMN`
-    │     └─ `EXPR`
-    │        └─ *
-    └─ `FROM`
-       ├─ `TABLE`
-       │  └─ `NAME`
-       │     └─ t1
-       └─ `TABLE`
-          └─ `NAME`
-             └─ t2
+ └─ `WITH`
+    ├─ `WITH-SELECT`
+    │  ├─ `NAME`
+    │  │  └─ t_x
+    │  └─ `STATEMENT`
+    │     ├─ `SELECT`
+    │     │  └─ `COLUMN`
+    │     │     ├─ `EXPR`
+    │     │     │  └─ ( a + 1 )
+    │     │     └─ `NAME`
+    │     │        └─ a
+    │     └─ `FROM`
+    │        └─ `TABLE`
+    │           └─ `NAME`
+    │              └─ t1
+    ├─ `WITH-SELECT`
+    │  ├─ `NAME`
+    │  │  └─ t_y
+    │  └─ `STATEMENT`
+    │     ├─ `SELECT`
+    │     │  └─ `COLUMN`
+    │     │     ├─ `EXPR`
+    │     │     │  └─ b + f ( x , y )
+    │     │     └─ `NAME`
+    │     │        └─ b
+    │     └─ `FROM`
+    │        └─ `TABLE`
+    │           └─ `NAME`
+    │              └─ t2
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ a
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ b
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ c
+       └─ `FROM`
+          ├─ `TABLE`
+          │  └─ `NAME`
+          │     └─ t_x
+          ├─ `TABLE`
+          │  └─ `NAME`
+          │     └─ t_y
+          └─ `TABLE`
+             └─ `NAME`
+                └─ t1
 
 
 

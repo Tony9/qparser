@@ -250,7 +250,38 @@ public class SqlParser {
                 Node t = stack.pop();
                 s.addFirst(t);
             }
-            return s;
+
+            //fix with statement
+            if ("`WITH`".equals(s.getChildren().get(0).toString())) {
+
+                NodeList<SqlNode> nodes = s.getChildren();
+                int lastSelectIndex = nodes.size()-1;
+                for (; lastSelectIndex > -1; lastSelectIndex --) {
+                    if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
+                        break;
+                    }
+                }
+
+                if (lastSelectIndex == -1) {
+                    throw new RuntimeException(String.format("Missing last select caluse in with..select statement."));
+                }
+
+                Statement withStatement = new Statement();
+                for (int i = 0; i < lastSelectIndex; i ++) {
+                    withStatement.addLast(nodes.get(i));
+                }
+
+                Statement lastSelectStatement = new Statement();
+                for (int i = lastSelectIndex; i < nodes.size(); i ++) {
+                    lastSelectStatement.addLast(nodes.get(i));
+                }
+                withStatement.addLast(lastSelectStatement);
+
+                return withStatement;
+
+            } else {
+                return s;
+            }
         }
 
         /**
@@ -422,7 +453,7 @@ public class SqlParser {
 
             for (List<SqlNode> nodes: nodeList) {
 
-                assert nodes.size() == 3;
+                assert nodes.size() == 3 || nodes.size() == 4;
 
                 //nodes: "name AS statement"
                 SqlNode withSelectNode = new SqlNode("`WITH-SELECT`");
@@ -432,8 +463,14 @@ public class SqlParser {
                 withSelectNode.addLast(nameNode);
 
                 withSelectNode.addLast(nodes.get(2));
-                //append ColumnNode
+
+                //append withSelectNode
                 curKeywordToken.addLast(withSelectNode);
+
+                //last select clause
+                if (nodes.size() == 4) {
+                    curKeywordToken.addLast(nodes.get(3));
+                }
             }
             return curKeywordToken;
         }
@@ -608,25 +645,7 @@ public class SqlParser {
 
             Statement statement = buildNestedStatement(sqlTokens);
             statement = buildNodes(statement);
-
-            //fix with statement
-            if ("`WITH`".equals(statement.getChildren().get(0).toString())) {
-                NodeList<SqlNode> nodes = statement.getChildren();
-
-                Statement withStatement = new Statement();
-                withStatement.addLast(nodes.get(0));
-
-                Statement lastSelectStatement = new Statement();
-                for (int i = 1; i < nodes.size(); i ++) {
-                    lastSelectStatement.addLast(nodes.get(i));
-                }
-                withStatement.addLast(lastSelectStatement);
-
-                return withStatement;
-
-            } else {
-                return statement;
-            }
+            return statement;
 
         }
     }
