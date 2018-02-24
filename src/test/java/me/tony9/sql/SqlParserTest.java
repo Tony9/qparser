@@ -22,7 +22,7 @@ public class SqlParserTest extends TestCase {
 
     private static Log logger = LogFactory.getLog(SqlParserTest.class);
 
-    private Map<String, String> loadTestCases() {
+    private Map<String, String> loadAllTestCases() {
 
         try {
             //load test cases
@@ -59,23 +59,49 @@ public class SqlParserTest extends TestCase {
 
     }
 
-    public void test_SQLTokenTree() {
+    private String[][] loadTestCases(String testName) {
 
-        Map<String, String> tests = loadTestCases();
+        Map<String, String> allTests = loadAllTestCases();
 
-        Map<String, String> sqls = tests.entrySet().stream()
-                .filter(map -> !map.getKey().endsWith(":tree]"))
+        Map<String, String> sqls = allTests.entrySet().stream()
+                .filter(map -> map.getKey().split(":").length == 2)
                 .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
 
-        Map<String, String> trees = tests.entrySet().stream()
-                .filter(map -> map.getKey().endsWith(":tree]"))
+        String suffix = ":" + testName + "]";
+        Map<String, String> expected = allTests.entrySet().stream()
+                .filter(map -> map.getKey().endsWith(suffix))
                 .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
 
-        Set<String> keySet = sqls.keySet();
+        //return tests
+        Set<String> keySet = expected.keySet().stream()
+                .map(p -> p.substring(0, p.length()-suffix.length())+"]")
+                .collect(Collectors.toSet());
         String[] keys = keySet.toArray(new String[keySet.size()]);
         Arrays.sort(keys);
 
-        for (String key: keys) {
+        String[][] tests = new String[keys.length][];
+        for (int i = 0; i < keys.length; i ++) {
+            String key = keys[i];
+            tests[i] = new String[3];
+            tests[i][0] = key;
+            tests[i][1] = sqls.get(key);
+            tests[i][2] = expected.get(key.substring(0, key.length()-1)+suffix);
+        }
+
+        return tests;
+    }
+
+
+
+    public void test_SQLTokenTree() {
+
+        String[][] tests = loadTestCases("tree");
+
+        for (int i = 0; i < tests.length; i ++) {
+
+            String key = tests[i][0];
+            String sql = tests[i][1];
+            String expected = tests[i][2];
 
             logger.info(String.format("%s", key));
 
@@ -83,14 +109,11 @@ public class SqlParserTest extends TestCase {
 //                continue;
 //            }
 
-            String sql = sqls.get(key);
             Node node = new SqlParser().parse(sql);
 
             String actual = node.toTreeString();
 
-            String expected = trees.get(String.format("[%s:tree]", key.substring(1, key.length()-1)));
-
-            logger.info(String.format("\n%s\n[%s:tree]\n %s\n[%s:tree]",
+            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
                     sql.replaceAll("(\r|\n)+", " "),
                     key.substring(1, key.length()-1),
                     actual,
@@ -105,15 +128,16 @@ public class SqlParserTest extends TestCase {
      */
     public void test_数据表() {
 
-        String[][] tests = new String[][] {
-                new String[] {"select * from a, b", "[a, b]"},
-                new String[] {"select * from a,b join c on 1=1", "[a, b, c]"},
-                new String[] {"select (a+1) as a, b, (case when a=1 then 1 when a=2 then 2 else 0 end) as c from (select b+f(x,g(y,z)) as b, c as c from (select c from t1) t2) t3", "[t1]"},
-        };
+        String[][] tests = loadTestCases("find-all-tables");
 
         for (int i = 0; i < tests.length; i ++) {
 
-            String sql = tests[i][0];
+            String key = tests[i][0];
+            String sql = tests[i][1];
+            String expected = "[" + tests[i][2] + "]";
+
+            logger.info(String.format("%s", key));
+
             Node node = new SqlParser().parse(sql);
 
             String tree = node.toTreeString();
@@ -138,24 +162,27 @@ public class SqlParserTest extends TestCase {
             String actual = tables.toString();
 
 
-            String expected = tests[i][1];
-
-            logger.info(String.format("\n%s\n %s",
+            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
                     sql.replaceAll("(\r|\n)+", " "),
-                    tree));
+                    key.substring(1, key.length()-1),
+                    actual,
+                    key.substring(1, key.length()-1)));
             Assert.assertEquals(expected.toString(), actual.toString());
         }
     }
 
     public void test_查询语句的返回列() {
-        String[][] tests = new String[][] {
-                new String[] {"select x as x, y as y1, f(x,y,0) as z from a as A, b", "[x, y1, z]"},
-                new String[] {"select (a+1) as a2, b2, (case when a=1 then 1 when a=2 then 2 else 0 end) as c2 from (select b+f(x,g(y,z)) as b1, c as c1 from (select c from t1) t2) t3", "[a2, b2, c2]"},
-        };
+
+        String[][] tests = loadTestCases("result-columns");
 
         for (int i = 0; i < tests.length; i ++) {
 
-            String sql = tests[i][0];
+            String key = tests[i][0];
+            String sql = tests[i][1];
+            String expected = "[" + tests[i][2] + "]";
+
+            logger.info(String.format("%s", key));
+
             Node node = new SqlParser().parse(sql);
 
             String tree = node.toTreeString();
@@ -194,9 +221,11 @@ public class SqlParserTest extends TestCase {
             String actual = columns.toString();
 
 
-            String expected = tests[i][1];
-
-            logger.info("\n\n" + sql);
+            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
+                    sql.replaceAll("(\r|\n)+", " "),
+                    key.substring(1, key.length()-1),
+                    actual,
+                    key.substring(1, key.length()-1)));
             Assert.assertEquals(expected.toString(), actual.toString());
         }
 

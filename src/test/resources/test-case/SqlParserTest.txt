@@ -1,6 +1,9 @@
 [sql-010:simple]
 select 'a','b' from t
 
+[sql-010:simple:find-all-tables]
+t
+
 [sql-010:simple:tree]
 `STATEMENT`
  ├─ `SELECT`
@@ -20,6 +23,8 @@ select 'a','b' from t
 [sql-015:simple]
 SELECT 'a' as a,b,'c' FROM t
 
+[sql-015:simple:find-all-tables]
+t
 
 [sql-015:simple:tree]
 `STATEMENT`
@@ -105,6 +110,18 @@ select 'a',substr(f(b, 1), 2) as b,'c' from t
        └─ `NAME`
           └─ t
 
+[sql-032:EXPR]
+select x as x, y as y1, f(x,y,0) as z from a as A, b
+
+[sql-032:EXPR:find-all-tables]
+A, b
+
+[sql-032:EXPR:result-columns]
+x, y1, z
+
+
+
+
 [sql-040:join]
 select
   x,sum(y) as y
@@ -117,6 +134,11 @@ where 1=1 or 1=2
 group     by 1,       f(x)
 order by 1 asc, 2 desc
 
+[sql-040:join:find-all-tables]
+t, t1, t2
+
+[sql-040:join:result-columns]
+x, y
 
 [sql-040:join:tree]
 `STATEMENT`
@@ -161,6 +183,12 @@ order by 1 asc, 2 desc
 [sql-050:subquery]
 select a from (select b from t2) t1
 
+[sql-050:subquery:find-all-tables]
+t2
+
+[sql-050:subquery:result-columns]
+a
+
 [sql-050:subquery:tree]
 `STATEMENT`
  ├─ `SELECT`
@@ -181,8 +209,19 @@ select a from (select b from t2) t1
        └─ `NAME`
           └─ t1
 
+
+
+
+
+
 [sql-060:sub-query]
 select a from (select b from (select c from t1) t2) t3
+
+[sql-060:sub-query:find-all-tables]
+t1
+
+[sql-060:sub-query:result-columns]
+a
 
 [sql-060:sub-query:tree]
 `STATEMENT`
@@ -218,6 +257,13 @@ select a from (select b from (select c from t1) t2) t3
 
 [sql-065:sub-query]
 select * from ( select (a+1) as a from t) t1, (select b+f(x,y) as b from (select c from t3) t2) t2 where (1=1 or 1=3) and name like '%'
+
+
+[sql-065:sub-query:find-all-tables]
+t, t3
+
+[sql-065:sub-query:result-columns]
+*
 
 [sql-065:sub-query:tree]
 `STATEMENT`
@@ -268,9 +314,9 @@ select * from ( select (a+1) as a from t) t1, (select b+f(x,y) as b from (select
 
 [sql-070:case-when]
 select
-  (a+1) as a,
-   b,
-   (case when a=1 then 1 when a=2 then 2 else 0 end) as c
+  (a+1) as a2,
+   b2,
+   (case when a=1 then 1 when a=2 then 2 else 0 end) as c2
   from (
     select
       b+f(x,g(y,z)) as b, c as c
@@ -279,6 +325,14 @@ select
      ) t2
   ) t3
 
+[sql-070:case-when:find-all-tables]
+t1
+
+[sql-070:case-when:result-columns]
+a2, b2, c2
+
+
+
 [sql-070:case-when:tree]
 `STATEMENT`
  ├─ `SELECT`
@@ -286,15 +340,15 @@ select
  │  │  ├─ `EXPR`
  │  │  │  └─ ( a + 1 )
  │  │  └─ `NAME`
- │  │     └─ a
+ │  │     └─ a2
  │  ├─ `COLUMN`
  │  │  └─ `EXPR`
- │  │     └─ b
+ │  │     └─ b2
  │  └─ `COLUMN`
  │     ├─ `EXPR`
  │     │  └─ ( case when a = 1 then 1 when a = 2 then 2 else 0 end )
  │     └─ `NAME`
- │        └─ c
+ │        └─ c2
  └─ `FROM`
     └─ `TABLE`
        ├─ `STATEMENT`
@@ -325,10 +379,16 @@ select
        └─ `NAME`
           └─ t3
 
-## [sql-080:with-query]
-## with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) select * from t1,t2
+[sql-080:with-query]
+with t1 as ( select (a+1) as a from t), t2 as (select b+f(x,y) as b from t2) select * from t1,t2
 
-[sql-080:with-query:tree]
+[sql-080:with-query:find-all-tables!]
+t, t2
+
+[sql-080:with-query:result-columns!]
+*
+
+[sql-080:with-query:tree!]
  `STATEMENT`
  ├─ `WITH`
  │  ├─ `EXPR`
@@ -378,12 +438,16 @@ select
 
 
 
-[sql-100:create]
+[sql-100:create-table]
 create    table xxx as (
   select #a,substr(b, #start, #end), 'select * from t', rank(a partition  b) from t
 )with data
 
-[sql-100:create:tree]
+[sql-100:create-table:find-all-tables!]
+t
+
+
+[sql-100:create-table:tree]
 `STATEMENT`
  ├─ `CREATE-TABLE`
  │  ├─ `NAME`
