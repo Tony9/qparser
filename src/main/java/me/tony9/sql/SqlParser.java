@@ -256,8 +256,12 @@ public class SqlParser {
                 s.addFirst(t);
             }
 
-            //fix with statement
-            if ("`WITH`".equals(s.getChildren().get(0).toString())) {
+            //fix with/insert into statement
+            //下面场景中，结尾处的select子句前后是可以不带括弧的
+            //1. with..select
+            //2. insert into..select
+            if ("`WITH`".equals(s.getChildren().get(0).toString())
+                    || "`INSERT`".equals(s.getChildren().get(0).toString())) {
 
                 LinkedList<Node<SqlNode>> nodes = s.getChildren();
                 int lastSelectIndex = nodes.size()-1;
@@ -271,18 +275,18 @@ public class SqlParser {
                     throw new RuntimeException(String.format("Missing last select caluse in with..select statement."));
                 }
 
-                Statement withStatement = new Statement();
+                Statement newStatement = new Statement();
                 for (int i = 0; i < lastSelectIndex; i ++) {
-                    withStatement.addLast(nodes.get(i));
+                    newStatement.addLast(nodes.get(i));
                 }
 
                 Statement lastSelectStatement = new Statement();
                 for (int i = lastSelectIndex; i < nodes.size(); i ++) {
                     lastSelectStatement.addLast(nodes.get(i));
                 }
-                withStatement.addLast(lastSelectStatement);
+                newStatement.addLast(lastSelectStatement);
 
-                return withStatement;
+                return newStatement;
 
             } else {
                 return s;
@@ -351,18 +355,49 @@ public class SqlParser {
 
             Token curToken = null;
             String keyword = curKeywordToken.toString();
-            if ("`SELECT`".equals(keyword)) {
+
+            if ("`CREATE-TABLE`".equals(keyword)) {         ///---CREATE
+
+                curToken = buildCreateTableNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`INSERT-INTO`".equals(keyword)) {   ///---INSERT
+
+                curToken = buildInsertIntoNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`UPDATE`".equals(keyword)) {        ///---UPDATE
+
+                curToken = buildUpdateNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`SET`".equals(keyword)) {
+
+                curToken = buildSetNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`DELETE-FROM`".equals(keyword)) {        ///---DELETE
+
+                curToken = buildDeleteNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`SELECT`".equals(keyword)) {        ///---SELECT
 
                 curToken = buildColumnNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
             } else if ("`WITH`".equals(keyword)) {
+
                 curToken = buildWithNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
+
             } else if ("`FROM`".equals(keyword) || keyword.endsWith("JOIN`")) {
+
                 curToken = buildTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
+
             } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword)) {
+
                 curToken = buildConidtionNode(curKeywordToken, nodeList);
                 if ("`ON`".equals(keyword)) {
                     LinkedList<Node<SqlNode>> nodes = statement.getChildren();
@@ -372,20 +407,25 @@ public class SqlParser {
                 }
 
             } else if ("`GROUP-BY`".equals(keyword)) {
+
                 curToken = buildGroupByNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
+
             } else if ("`ORDER-BY`".equals(keyword)) {
+
                 curToken = buildOrderByNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
-            } else if ("`CREATE-TABLE`".equals(keyword)) {
-                curToken = buildCreateTableNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
+
             } else if ("`WITH-DATA`".equals(keyword)) {
+
                 statement.addLast(curKeywordToken);
+
             } else {
+
                 logger.error(statement.toTreeString());
                 logger.error(nodeList);
                 throw new RuntimeException(String.format("Unsupported Keywords '%s'.", keyword));
+
             }
 
         }
@@ -514,9 +554,14 @@ public class SqlParser {
         }
 
         /**
-         * create table name as (column_a, column_b, ...);
-         * create table name as (statement);
-         * create table name as (statement) with data;
+         * 2种情形
+         * 1. create table $table_name as ($select_clause) [with data]
+         * 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
+         *
+         * $table_name   形如 "a", "qtemp/a"
+         * $datatype     形如 "varchar(32)", "int", "decimal(12,3)"。
+         *  其它属性包括"NOT NULL", "PRIMARY KEY", "DEFAULT $value"，举例: "int NOT NULL PRIMARY KEY DEFAULT 1"
+         *
          *
          * @param curKeywordToken
          * @param nodeList
@@ -530,7 +575,7 @@ public class SqlParser {
 
             if (nodes.size() >= 3 && "AS".equalsIgnoreCase(nodes.get(nodes.size()-2).toString())) {
                 //
-                //create table qtemp/t_a as ( select ... ) [with data]
+                //case 1. create table $table_name as ($select_clause) [with data]
                 //
 
                 //NameNode
@@ -546,12 +591,157 @@ public class SqlParser {
 
             } else {
                 //
-                //TODO: create table qtemp/t_a ( col1 datatype1, col2 datatype2, ... )
+                //TODO: case 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
                 //
 
-                SqlNode nameNode = new SqlNode("`NAME`");
+                throw new UnsupportedOperationException(String.format("Unsupported Statement"));
 
             }
+
+            return curKeywordToken;
+        }
+
+        /**
+         * 2种情形
+         * 1. insert into $table_name ($column_name, $clumn_name, ...) values ($v, $v, ...), ($v, $v, ...)
+         * 2. insert into $table_name ($column_name, $clumn_name, ...) $select_clause
+         *
+         * $table_name   形如 "a", "qtemp/a"
+         *
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
+        private static Token buildInsertIntoNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+
+            assert nodeList.size() == 1;
+
+            List<SqlNode> nodes = nodeList.get(0);
+
+            if (!"`STATEMENT`".equals(nodes.get(nodes.size()-1).toString())) {
+                //
+                //TODO: case 1. insert into $table_name ($column_name, $clumn_name, ...) values ($v, $v, ...), ($v, $v, ...)
+                //
+
+                throw new UnsupportedOperationException(String.format("Unsupported Statement"));
+
+            } else {
+                //
+                //case 2. insert into $table_name ($column_name, $clumn_name, ...) $select_clause
+                //
+
+                SqlNode tableNode = new SqlNode("`TABLE`");
+
+                SqlNode tableNameNode = new SqlNode("`NAME`");
+                tableNameNode.addLast(nodes.get(0));
+                tableNode.addLast(tableNameNode);
+
+                for (int i = 2; i < nodes.size()-2; i += 2) {
+                    SqlNode columnNameNode = new SqlNode(("`NAME`"));
+                    columnNameNode.addLast(nodes.get(i));
+
+                    SqlNode columnNode = new SqlNode("`COLUMN`");
+                    columnNode.addLast(columnNameNode);
+
+                    tableNode.addLast(columnNode);
+                }
+
+                curKeywordToken.addLast(tableNode);
+
+
+                curKeywordToken.addLast(nodes.get(nodes.size()-1));
+
+            }
+
+            return curKeywordToken;
+        }
+
+
+        /**
+         * 1种情形
+         * 1. update $table_name set expr1, expr2 where expr
+         *
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
+        private static Token buildUpdateNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+
+            assert nodeList.size() == 1;
+
+            List<SqlNode> nodes = nodeList.get(0);
+
+
+            SqlNode tableNode = new SqlNode("`TABLE`");
+
+            SqlNode tableNameNode = new SqlNode("`NAME`");
+            tableNameNode.addLast(nodes.get(0));
+            tableNode.addLast(tableNameNode);
+
+            curKeywordToken.addLast(tableNode);
+
+            return curKeywordToken;
+        }
+
+        /**
+         * 1种情形
+         * 1. set col1=expr1, col2=expr2, ...
+         *
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
+        private static Token buildSetNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+
+            for (List<SqlNode> nodes: nodeList) {
+
+                SqlNode columnNode = new SqlNode("`COLUMN`");
+
+                //ColumnName
+                SqlNode columnNameNode = new SqlNode("`NAME`");
+                columnNameNode.addLast(nodes.get(0));
+                columnNode.addLast(columnNameNode);
+
+                //ColumnExpr
+                List<SqlToken> expressionTokens = new ArrayList<>();
+                for (int i = 2; i < nodes.size(); i ++) {
+                    expressionTokens.addAll(((Token)nodes.get(i)).sqlTokens);
+                }
+                SqlNode columnExprNode = new SqlNode("`EXPR`");
+                columnExprNode.addLast(new Expression(expressionTokens));
+                columnNode.addLast(columnExprNode);
+
+                curKeywordToken.addLast(columnNode);
+
+            }
+            return curKeywordToken;
+        }
+
+        /**
+         * 1种情形
+         * 1. delete [*] from $table_name where expr
+         *
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
+        private static Token buildDeleteNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+
+            assert nodeList.size() == 1;
+
+            List<SqlNode> nodes = nodeList.get(0);
+
+            SqlNode tableNode = new SqlNode("`TABLE`");
+
+            SqlNode tableNameNode = new SqlNode("`NAME`");
+            tableNameNode.addLast(nodes.get(0));
+            tableNode.addLast(tableNameNode);
+
+            curKeywordToken.addLast(tableNode);
 
             return curKeywordToken;
         }

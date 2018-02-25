@@ -449,22 +449,30 @@ a, b, c
                 └─ t1
 
 
+[sql-090:union]
+select a from t1
+union
+select a from t2
+
+
+
+[sql-090:union:tree!]
+
+
 
 
 [sql-100:create-table]
-create    table xxx as (
+create    table qtemp/t_xxx as (
   select #a,substr(b, #start, #end), 'select * from t', rank(a partition  b) from t
 )with data
-
-[sql-100:create-table:find-all-tables!]
-t
-
 
 [sql-100:create-table:tree]
 `STATEMENT`
  ├─ `CREATE-TABLE`
  │  ├─ `NAME`
- │  │  └─ xxx
+ │  │  ├─ qtemp
+ │  │  ├─ /
+ │  │  └─ t_xxx
  │  └─ `STATEMENT`
  │     ├─ `SELECT`
  │     │  ├─ `COLUMN`
@@ -484,3 +492,119 @@ t
  │           └─ `NAME`
  │              └─ t
  └─ `WITH-DATA`
+
+[sql-101:create-table]
+CREATE TABLE qtemp/t_persons (
+    PersonID int,
+    LastName varchar(255),
+    FirstName varchar(255),
+    Address varchar(255),
+    City varchar(255)
+)
+
+[sql-101:create-table:tree!]
+
+
+[sql-110:insert-into]
+INSERT INTO Customers (CustomerName, ContactName, Address, City, PostalCode, Country)
+VALUES ('Cardinal', 'Tom B. Erichsen', 'Skagen 21', 'Stavanger', '4006', 'Norway')
+
+[sql-110:insert-into:tree!]
+
+[sql-111:insert-into]
+INSERT INTO Customers (CustomerName, City, Country)
+  SELECT CustomerName||'@'||Country, City, Country
+  FROM Customers
+  Where (Country='CHN' OR Country='USA')
+        AND CustomerName like 'Tony%'
+
+[sql-111:insert-into:tree]
+`STATEMENT`
+ └─ `INSERT-INTO`
+    ├─ `TABLE`
+    │  ├─ `NAME`
+    │  │  └─ Customers
+    │  ├─ `COLUMN`
+    │  │  └─ `NAME`
+    │  │     └─ CustomerName
+    │  ├─ `COLUMN`
+    │  │  └─ `NAME`
+    │  │     └─ City
+    │  └─ `COLUMN`
+    │     └─ `NAME`
+    │        └─ Country
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ CustomerName || '@' || Country
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ City
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ Country
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     └─ `NAME`
+       │        └─ Customers
+       └─ `WHERE`
+          └─ ( Country = 'CHN' OR Country = 'USA' ) AND CustomerName like 'Tony%'
+
+[sql-120:update]
+UPDATE Customers
+SET ContactName = 'Alfred Schmidt'||'@'||City, City= 'Frankfurt'
+WHERE CustomerID = 1
+
+[sql-120:update:tree]
+ `STATEMENT`
+ ├─ `UPDATE`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Customers
+ ├─ `SET`
+ │  ├─ `COLUMN`
+ │  │  ├─ `NAME`
+ │  │  │  └─ ContactName
+ │  │  └─ `EXPR`
+ │  │     └─ 'Alfred Schmidt' || '@' || City
+ │  └─ `COLUMN`
+ │     ├─ `NAME`
+ │     │  └─ City
+ │     └─ `EXPR`
+ │        └─ 'Frankfurt'
+ └─ `WHERE`
+    └─ CustomerID = 1
+
+[sql-130:delete]
+DELETE FROM Customers
+WHERE CustomerName='Alfreds Futterkiste'
+
+[sql-130:delete:tree]
+ `STATEMENT`
+ ├─ `DELETE-FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Customers
+ └─ `WHERE`
+    └─ CustomerName = 'Alfreds Futterkiste'
+
+[sql-131:delete]
+DELETE FROM Customers
+
+[sql-131:delete:tree]
+ `STATEMENT`
+ └─ `DELETE-FROM`
+    └─ `TABLE`
+       └─ `NAME`
+          └─ Customers
+
+[sql-132:delete]
+DELETE * FROM Customers
+
+[sql-132:delete:tree!]
+ `STATEMENT`
+ └─ `DELETE-FROM`
+    └─ `TABLE`
+       └─ `NAME`
+          └─ Customers
