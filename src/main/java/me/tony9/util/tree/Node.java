@@ -1,25 +1,26 @@
 package me.tony9.util.tree;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 public class Node<T> {
 
     private Node<T> parent;
-    private NodeList<T> children;
+    private LinkedList<Node<T>> children;
     private T data;
 
     public Node() {
-        this.children = new NodeList<T>();
+        this.children = new LinkedList<Node<T>>();
         this.data = null;
     }
 
     public Node(T data) {
-        this.children = new NodeList<T>();
+        this.children = new LinkedList<Node<T>>();
         this.data = data;
     }
 
-    public NodeList<T> getChildren() {
+    public LinkedList<Node<T>> getChildren() {
         return children;
     }
 
@@ -70,7 +71,7 @@ public class Node<T> {
         while (index < nodes.size()-1) {
             index ++;
             Node node = nodes.get(index);
-            NodeList children = node.getChildren();
+            LinkedList<Node<T>> children = node.getChildren();
             for (int i = 0; i < children.size(); i ++) {
                 nodes.add(children.get(i));
             }

@@ -3,7 +3,6 @@ package me.tony9.sql;
 import junit.framework.Assert;
 import junit.framework.TestCase;
 import me.tony9.util.tree.Node;
-import me.tony9.util.tree.NodeList;
 import me.tony9.util.tree.NodeTest;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -105,7 +104,7 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-//            if (!key.startsWith("[sql-080:")) { continue; }
+//            if (!key.startsWith("[sql-101:")) { continue; }
 
             Node node = new SqlParser().parse(sql);
 
@@ -151,7 +150,7 @@ public class SqlParserTest extends TestCase {
                     })
                     .forEach(n -> {
                         Node t = (Node)n;
-                        Node tableNameNode = t.getChildren().get(0);
+                        Node tableNameNode = (Node)t.getChildren().get(0);
                         if (!tableNameNode.toString().equals("`STATEMENT`")) {
                             tables.add(tableNameNode.toString());
                         }
@@ -209,7 +208,7 @@ public class SqlParserTest extends TestCase {
                     })
                     .forEach(n -> {
                         Node t = (Node)n;
-                        NodeList children = t.getChildren();
+                        LinkedList<Node> children = t.getChildren();
                         Node lastNode = children.get(children.size()-1);
                         //TODO: bug, "a", "a as a", "f(x,y,z)": 第3个场景没有as，应该报错
                         columns.add(lastNode.toString());

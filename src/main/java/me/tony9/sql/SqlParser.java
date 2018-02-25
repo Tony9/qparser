@@ -1,28 +1,33 @@
 package me.tony9.sql;
 
 import me.tony9.util.tree.Node;
-import me.tony9.util.tree.NodeList;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class SqlParser {
 
+    private static Log logger = LogFactory.getLog(SqlParser.class);
+
+
     private static Set<String> KEYWORDS;
     static {
         String[] statements = new String[] {
-                //Table
+                //DDL
+                "CREATE TABLE",
                 "CREATE TABLE WITH DATA",
+                "CREATE INDEX ON",
+                "DROP TABLE",
+                "DROP INDEX",
+                //DML
                 "SELECT FROM [LEFT|RIGHT|INNER|OUTER] JOIN ON WHERE GROUP BY HAVING ORDER BY LIMIT UNION [ALL]",
                 "WITH SELECT FROM SELECT FROM SELECT FROM",
                 "INSERT INTO VALUES",
-                "DELETE FROM",
-                "DROP TABLE",
-                //Index
-                "CREATE INDEX ON",
-                "DROP INDEX",
-                //Expression
-//                "AND", "OR", "NOT"
+                "INSERT INTO SELECT FROM",
+                "UPDATE SET WHERE",
+                "DELETE FROM WHERE",
         };
 
         KEYWORDS = new HashSet<>();
@@ -254,7 +259,7 @@ public class SqlParser {
             //fix with statement
             if ("`WITH`".equals(s.getChildren().get(0).toString())) {
 
-                NodeList<SqlNode> nodes = s.getChildren();
+                LinkedList<Node<SqlNode>> nodes = s.getChildren();
                 int lastSelectIndex = nodes.size()-1;
                 for (; lastSelectIndex > -1; lastSelectIndex --) {
                     if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
@@ -360,7 +365,7 @@ public class SqlParser {
             } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword)) {
                 curToken = buildConidtionNode(curKeywordToken, nodeList);
                 if ("`ON`".equals(keyword)) {
-                    NodeList<SqlNode> nodes = statement.getChildren();
+                    LinkedList<Node<SqlNode>> nodes = statement.getChildren();
                     nodes.get(nodes.size()-1).addLast(curToken);
                 } else {
                     statement.addLast(curToken);
@@ -378,6 +383,8 @@ public class SqlParser {
             } else if ("`WITH-DATA`".equals(keyword)) {
                 statement.addLast(curKeywordToken);
             } else {
+                logger.error(statement.toTreeString());
+                logger.error(nodeList);
                 throw new RuntimeException(String.format("Unsupported Keywords '%s'.", keyword));
             }
 
@@ -521,15 +528,30 @@ public class SqlParser {
 
             List<SqlNode> nodes = nodeList.get(0);
 
-            assert nodes.size() == 3;
+            if (nodes.size() >= 3 && "AS".equalsIgnoreCase(nodes.get(nodes.size()-2).toString())) {
+                //
+                //create table qtemp/t_a as ( select ... ) [with data]
+                //
 
-            //NameNode
-            SqlNode nameNode = new SqlNode("`NAME`");
-            nameNode.addLast(nodes.get(0));
-            curKeywordToken.addLast(nameNode);
+                //NameNode
+                //TODO: ["qtemp", "/", "t_xxx"] => "qtemp/t_xxx"
+                SqlNode nameNode = new SqlNode("`NAME`");
+                for (int i = 0; i < nodes.size()-2; i ++) {
+                    nameNode.addLast(nodes.get(i));
+                }
+                curKeywordToken.addLast(nameNode);
 
-            //StatementNode
-            curKeywordToken.addLast(nodes.get(nodes.size()-1));
+                //StatementNode
+                curKeywordToken.addLast(nodes.get(nodes.size()-1));
+
+            } else {
+                //
+                //TODO: create table qtemp/t_a ( col1 datatype1, col2 datatype2, ... )
+                //
+
+                SqlNode nameNode = new SqlNode("`NAME`");
+
+            }
 
             return curKeywordToken;
         }

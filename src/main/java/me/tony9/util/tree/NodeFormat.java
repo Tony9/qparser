@@ -79,7 +79,7 @@ public class NodeFormat {
 
         for (int i = 0; i < startNode.getChildren().size(); i ++) {
 
-            Node node = startNode.getChildren().get(i);
+            Node node = (Node)startNode.getChildren().get(i);
             if (i < startNode.getChildren().size()-1) {
                 s.append(prefix).append(" ├─ ");
             } else {
