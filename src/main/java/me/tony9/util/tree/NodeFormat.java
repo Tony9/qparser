@@ -9,25 +9,17 @@ public class NodeFormat {
      * 这里, root必须是startNode的祖先节点。
      *
      * 比如， 指定root=null，输出整棵树：
-     * .
-     * ├──`SELECT`
-     * ├──a
-     * ├──`FROM`
-     * ├──.
-     * │  ├──(
-     * │  ├──`SELECT`
-     * │  ├──b
-     * │  ├──`FROM`
-     * │  ├──.
-     * │  │  ├──(
-     * │  │  ├──`SELECT`
-     * │  │  ├──c
-     * │  │  ├──`FROM`
-     * │  │  ├──t1
-     * │  │  └──)
-     * │  ├──t2
-     * │  └──)
-     * └──t3
+     * root
+     * ├─ a
+     * ├─ b
+     * │  ├─ b1
+     * │  ├─ b2
+     * │  │  ├─ b21
+     * │  │  ├─ b22
+     * │  ├─ b3
+     * │  └─ b4
+     * └─ c
+     *
      * @param root root of Tree.
      * @param startNode
      * @return
