@@ -104,7 +104,7 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-//            if (!key.startsWith("[sql-131:")) { continue; }
+            if (!key.startsWith("[sql-037:")) { continue; }
 
             Node node = new SqlParser().parse(sql);
 

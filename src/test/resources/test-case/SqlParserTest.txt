@@ -224,7 +224,7 @@ WHERE t.a IS NOT NULL
   and c in (1,2,3)
   and c between 1 and 3
 group by t.a,d
---having max(b)>100
+having max(b)>100 and t.a like 'a%'
 order by max(t.b) desc, sum(c) asc
 
 [sql-037:where:tree]
@@ -257,6 +257,8 @@ order by max(t.b) desc, sum(c) asc
  │  │  └─ t.a
  │  └─ `EXPR`
  │     └─ d
+ ├─ `HAVING`
+ │  └─ max ( b ) > 100 and t.a like 'a%'
  └─ `ORDER-BY`
     ├─ `EXPR`
     │  └─ max ( t.b ) desc
@@ -598,9 +600,15 @@ union all
 select a from t3 where a=100
 order by a
 
+[sql-090:union:tree]
+STATEMENT
+  UNION-ALL
+    UNION
+      SELECT t1
+      SELECT t2
+    SELECT t3
+  ORDER-BY
 
-
-[sql-090:union:tree!]
 
 [sql-091:union]
 (
@@ -627,6 +635,25 @@ union
 order by a
 
 [sql-092:union:tree!]
+
+
+[sql-093:union]
+
+(select a from t1 where a>1)
+union
+(select a from t2 where a=1)
+union all
+(select a from t3 where a=100)
+
+
+[sql-093:union:tree]
+STATEMENT
+  UNION-ALL
+    UNION
+      SELECT t1
+      SELECT t2
+    SELECT t3
+
 
 
 [sql-100:create-table]

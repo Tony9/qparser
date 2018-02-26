@@ -217,27 +217,29 @@ public class SqlParser {
 
         /**
          * 分析嵌套子句，组装Statement对象
-         * select a,b
-         * from (
-         *      select a,b
-         *      from (
-         *          select a,b
-         *          from t1
-         *      ) as t2
-         * ) as t3
-         * ;
-         *
-         * create table t (
-         *      select a,b
-         *      from t
-         * ) with test
-         * ;
+         * 包括以下情形
+         * 1. 子句在括弧中
+         *  a. select from (select from )
+         *  b. select from join (select from )
+         *  c. create table t as (select from )
+         *  d. insert into t (select from )
+         * 2. 子句不在括弧中
+         *  a. union 语句不含括弧: select from union [all] select from
+         *  b. with-select 最后一句子句没有括弧: with a as (select from), b as (select from) select from
+         *  c. insert-into 最后一句子句可不加括弧: insert into ... select，
          *
          * @param sqlTokens
          * @return
          */
         private static Statement buildNestedStatement(List<SqlToken> sqlTokens) {
 
+            //
+            //处理处在括弧中的SQL子句
+            //比如
+            // 1. select from (select from ...)
+            // 2. create table t as (select from ...)
+            // 3. insert into t (select from ...)
+            //
             Set<Integer> nestedStatementStopIndex = findAllParenPairs(sqlTokens).stream()
                     .filter(interval -> TOKEN_SELECT.equals(sqlTokens.get(interval.start + 1).getText().toUpperCase()))
                     .map(interval -> interval.stop)
@@ -256,7 +258,7 @@ public class SqlParser {
                     Statement nestedStatement = new Statement();
 
                     int parenCount = 0;
-                    Node n = null;
+                    Node n;
                     while (true) {
                         n = stack.pop();
                         if (n instanceof Token) {
@@ -297,10 +299,11 @@ public class SqlParser {
                 s.addFirst(t);
             }
 
-            //fix with/insert into statement
+            //
             //下面场景中，结尾处的select子句前后是可以不带括弧的
             //1. with..select
             //2. insert into..select
+            //
             if ("`WITH`".equals(s.getChildren().get(0).toString())
                     || "`INSERT`".equals(s.getChildren().get(0).toString())) {
 
@@ -396,7 +399,7 @@ public class SqlParser {
 
         private static void buildNode(Statement statement, Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
-            Token curToken = null;
+            Token curToken;
             String keyword = curKeywordToken.toString();
 
             if ("`CREATE-TABLE`".equals(keyword)) {         ///---CREATE
@@ -439,7 +442,7 @@ public class SqlParser {
                 curToken = buildTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword)) {
+            } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword) || "`HAVING`".equals(keyword)) {
 
                 curToken = buildConditionNode(curKeywordToken, nodeList);
                 if ("`ON`".equals(keyword)) {
@@ -804,6 +807,7 @@ public class SqlParser {
          */
         private static Token buildDeleteNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
+            //do nothing
             return curKeywordToken;
         }
 
