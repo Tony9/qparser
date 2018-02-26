@@ -12,6 +12,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -90,11 +91,9 @@ public class SqlParserTest extends TestCase {
         return tests;
     }
 
+    public void runTests(String testName, Function<String, String> fn) {
 
-
-    public void test_SQLTokenTree() {
-
-        String[][] tests = loadTestCases("tree");
+        String[][] tests = loadTestCases(testName);
 
         for (int i = 0; i < tests.length; i ++) {
 
@@ -104,11 +103,10 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-            if (!key.startsWith("[sql-037:")) { continue; }
+//            if (!key.startsWith("[sql-090:")) { continue; }
+            if (key.indexOf("union") > -1) { continue; }
 
-            Node node = new SqlParser().parse(sql);
-
-            String actual = node.toTreeString();
+            String actual = fn.apply(sql);
 
             logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
                     sql.replaceAll("(\r|\n)+", " "),
@@ -117,23 +115,27 @@ public class SqlParserTest extends TestCase {
                     key.substring(1, key.length()-1)));
             Assert.assertEquals(expected.toString().trim(), actual.toString().trim());
         }
+
+        logger.info(String.format("%d tests passed!", tests.length));
     }
 
-    /**
-     * - 获取数据表
-     *
-     */
+
+    public void test_SQLTokenTree() {
+
+        runTests("tree", sql -> {
+
+            Node node = new SqlParser().parse(sql);
+            return node.toTreeString();
+
+        });
+
+    }
+
+
     public void test_数据表() {
 
-        String[][] tests = loadTestCases("find-all-tables");
 
-        for (int i = 0; i < tests.length; i ++) {
-
-            String key = tests[i][0];
-            String sql = tests[i][1];
-            String expected = "[" + tests[i][2] + "]";
-
-            logger.info(String.format("%s", key));
+        runTests("find-all-tables", sql -> {
 
             Node node = new SqlParser().parse(sql);
 
@@ -157,28 +159,16 @@ public class SqlParserTest extends TestCase {
                     });
 
             String actual = tables.toString();
+            actual = actual.substring(1, actual.length()-1);
+            return actual;
 
+        });
 
-            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
-                    sql.replaceAll("(\r|\n)+", " "),
-                    key.substring(1, key.length()-1),
-                    actual,
-                    key.substring(1, key.length()-1)));
-            Assert.assertEquals(expected.toString(), actual.toString());
-        }
     }
 
     public void test_查询语句的返回列() {
 
-        String[][] tests = loadTestCases("result-columns");
-
-        for (int i = 0; i < tests.length; i ++) {
-
-            String key = tests[i][0];
-            String sql = tests[i][1];
-            String expected = "[" + tests[i][2] + "]";
-
-            logger.info(String.format("%s", key));
+        runTests("result-columns", sql -> {
 
             Node node = new SqlParser().parse(sql);
 
@@ -216,15 +206,10 @@ public class SqlParserTest extends TestCase {
                     });
 
             String actual = columns.toString();
+            actual = actual.substring(1, actual.length()-1);
+            return actual;
 
-
-            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
-                    sql.replaceAll("(\r|\n)+", " "),
-                    key.substring(1, key.length()-1),
-                    actual,
-                    key.substring(1, key.length()-1)));
-            Assert.assertEquals(expected.toString(), actual.toString());
-        }
+        });
 
     }
 

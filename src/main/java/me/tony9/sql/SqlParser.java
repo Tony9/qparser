@@ -407,6 +407,10 @@ public class SqlParser {
                 curToken = buildCreateTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
+            } else if ("`WITH-DATA`".equals(keyword)) {
+
+                statement.addLast(curKeywordToken);
+
             } else if ("`INSERT-INTO`".equals(keyword)) {   ///---INSERT
 
                 curToken = buildInsertIntoNode(curKeywordToken, nodeList);
@@ -437,24 +441,36 @@ public class SqlParser {
                 curToken = buildWithNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if ("`FROM`".equals(keyword) || keyword.endsWith("JOIN`")) {
+            } else if ("`FROM`".equals(keyword)) {
 
                 curToken = buildTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword) || "`HAVING`".equals(keyword)) {
+            } else if (keyword.endsWith("-JOIN`")) {
+
+                curToken = buildTableNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`ON`".equals(keyword)) {
 
                 curToken = buildConditionNode(curKeywordToken, nodeList);
-                if ("`ON`".equals(keyword)) {
-                    LinkedList<Node<SqlNode>> nodes = statement.getChildren();
-                    nodes.get(nodes.size()-1).addLast(curToken);
-                } else {
-                    statement.addLast(curToken);
-                }
+                //把`ON`节点移到之前的`-JOIN`节点，作为`-JOIN`的最后一个子节点
+                LinkedList<Node<SqlNode>> nodes = statement.getChildren();
+                nodes.get(nodes.size() - 1).addLast(curToken);
+
+            } else if ("`WHERE`".equals(keyword)) {
+
+                curToken = buildConditionNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
 
             } else if ("`GROUP-BY`".equals(keyword)) {
 
                 curToken = buildGroupByNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
+
+            } else if ("`HAVING`".equals(keyword)) {
+
+                curToken = buildConditionNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
             } else if ("`ORDER-BY`".equals(keyword)) {
@@ -462,9 +478,13 @@ public class SqlParser {
                 curToken = buildOrderByNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if ("`WITH-DATA`".equals(keyword)) {
+            } else if ("`LIMIT`".equals(keyword)) {
 
-                statement.addLast(curKeywordToken);
+                //TODO: 分页尚未支持，不同数据库的语句差别较大
+
+            } else if ("`UNION`".equals(keyword) || "`UNION-ALL`".equals(keyword)) {
+
+                //TODO: 尚未支持
 
             } else {
 
