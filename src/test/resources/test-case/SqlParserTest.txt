@@ -745,12 +745,13 @@ WHERE CustomerID = 1
     └─ CustomerID = 1
 
 [sql-130:delete]
-DELETE FROM Customers
+DELETE * FROM Customers
 WHERE CustomerName='Alfreds Futterkiste'
 
 [sql-130:delete:tree]
  `STATEMENT`
- ├─ `DELETE-FROM`
+ ├─ `DELETE`
+ ├─ `FROM`
  │  └─ `TABLE`
  │     └─ `NAME`
  │        └─ Customers
@@ -762,7 +763,8 @@ DELETE FROM Customers
 
 [sql-131:delete:tree]
  `STATEMENT`
- └─ `DELETE-FROM`
+ ├─ `DELETE`
+ └─ `FROM`
     └─ `TABLE`
        └─ `NAME`
           └─ Customers
@@ -770,9 +772,10 @@ DELETE FROM Customers
 [sql-132:delete]
 DELETE * FROM Customers
 
-[sql-132:delete:tree!]
+[sql-132:delete:tree]
  `STATEMENT`
- └─ `DELETE-FROM`
+ ├─ `DELETE`
+ └─ `FROM`
     └─ `TABLE`
        └─ `NAME`
           └─ Customers

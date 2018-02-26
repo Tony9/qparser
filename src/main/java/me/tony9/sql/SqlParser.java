@@ -11,8 +11,7 @@ public class SqlParser {
 
     private static Log logger = LogFactory.getLog(SqlParser.class);
 
-
-    private static Set<String> KEYWORDS;
+    private final static Set<String> KEYWORDS;
     static {
         String[] statements = new String[] {
                 //DDL
@@ -34,6 +33,29 @@ public class SqlParser {
         for (int i = 0; i < statements.length; i ++) {
             for (String w : statements[i].split("[\\s\\[\\]\\|]+")) {
                 KEYWORDS.add(w);
+            }
+        }
+    }
+
+
+    private final static Set<String> MULTIPLE_KEYWORDS; //合法的合并关键字
+    static {
+        String[] multipleKeywords = new String[] {
+                //DDL
+                "CREATE-TABLE WITH-DATA",
+                "CREATE-INDEX",
+                "DROP-TABLE",
+                "DROP-INDEX",
+                //DML
+                "LEFT-JOIN RIGHT-JOIN INNER-JOIN OUTER-JOIN",
+                "GROUP-BY ORDER-BY UNION-ALL",
+                "INSERT-INTO",
+        };
+
+        MULTIPLE_KEYWORDS = new HashSet<>();
+        for (int i = 0; i < multipleKeywords.length; i ++) {
+            for (String w : multipleKeywords[i].split("[\\s\\[\\]\\|]+")) {
+                MULTIPLE_KEYWORDS.add(w);
             }
         }
     }
@@ -81,6 +103,25 @@ public class SqlParser {
                 str.append(this.sqlTokens.get(i).getText());
             }
             return this.keyword? "`"+str.toString().toUpperCase()+"`":str.toString();
+        }
+
+        public boolean canAppend(Token t) {
+
+            if (!this.keyword || !t.keyword) return false;
+
+            StringBuffer str = new StringBuffer();
+            for (int i = 0; i < this.sqlTokens.size(); i ++) {
+                if (i > 0) str.append("-");
+                str.append(this.sqlTokens.get(i).getText());
+            }
+            str.append("-");
+            for (int i = 0; i < t.sqlTokens.size(); i ++) {
+                if (i > 0) str.append("-");
+                str.append(t.sqlTokens.get(i).getText());
+            }
+
+            return MULTIPLE_KEYWORDS.contains(str.toString().toUpperCase());
+
         }
 
         public void append(Token t) {
@@ -315,22 +356,24 @@ public class SqlParser {
                 SqlNode node = (SqlNode)nestedStatement.getChildren().get(i);
 
                 if (node instanceof Token && ((Token) node).keyword) {
+
+                    Token t = (Token) node;
                     if (curKeywordToken != null) {
 
-                        if (nodes.size() > 0) {
+                        if (nodes.size() > 0 || !curKeywordToken.canAppend(t)) {
                             List<List<SqlNode>> nodeList = splitByComma(nodes);
                             buildNode(newStatement, curKeywordToken, nodeList);
 
                             //reset nodes and curKeywordToken
                             nodes = new LinkedList<>();
-                            curKeywordToken = new Token((Token) node);
+                            curKeywordToken = new Token(t);
 
                         } else {    //合并连续的keywords
-                            curKeywordToken.append((Token) node);
+                            curKeywordToken.append(t);
                         }
 
                     } else {
-                        curKeywordToken = new Token((Token) node);
+                        curKeywordToken = new Token(t);
                     }
 
                 } else if (node instanceof Statement) {
@@ -376,7 +419,7 @@ public class SqlParser {
                 curToken = buildSetNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if ("`DELETE-FROM`".equals(keyword)) {        ///---DELETE
+            } else if ("`DELETE`".equals(keyword)) {        ///---DELETE
 
                 curToken = buildDeleteNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
@@ -760,18 +803,6 @@ public class SqlParser {
          * @return
          */
         private static Token buildDeleteNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
-
-            assert nodeList.size() == 1;
-
-            List<SqlNode> nodes = nodeList.get(0);
-
-            SqlNode tableNode = new SqlNode("`TABLE`");
-
-            SqlNode tableNameNode = new SqlNode("`NAME`");
-            tableNameNode.addLast(nodes.get(0));
-            tableNode.addLast(tableNameNode);
-
-            curKeywordToken.addLast(tableNode);
 
             return curKeywordToken;
         }
