@@ -398,7 +398,7 @@ public class SqlParser {
 
             } else if ("`ON`".equals(keyword) || "`WHERE`".equals(keyword)) {
 
-                curToken = buildConidtionNode(curKeywordToken, nodeList);
+                curToken = buildConditionNode(curKeywordToken, nodeList);
                 if ("`ON`".equals(keyword)) {
                     LinkedList<Node<SqlNode>> nodes = statement.getChildren();
                     nodes.get(nodes.size()-1).addLast(curToken);
@@ -430,7 +430,13 @@ public class SqlParser {
 
         }
 
-        private static Token buildConidtionNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        /**
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
+        private static Token buildConditionNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
             assert nodeList.size() == 1;
 
@@ -452,14 +458,20 @@ public class SqlParser {
             return curKeywordToken;
         }
 
+        /**
+         * 3种情形
+         * 1. "expr"
+         * 2. "expr as name"
+         * TODO: 3. "expr name" 尚不支持
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
         private static Token buildColumnNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
             for (List<SqlNode> nodes: nodeList) {
 
-                //三种情形
-                //1. "expr"
-                //2. "expr as name"
-                //TODO: 3. "expr name"
                 SqlNode columnNode = new SqlNode("`COLUMN`");
 
                 //Expression Node
@@ -496,6 +508,14 @@ public class SqlParser {
             return curKeywordToken;
         }
 
+        /**
+         * 1种情形
+         * 1. with a as (select ...), b as (select ...) select ...
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
         private static Token buildWithNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
             for (List<SqlNode> nodes: nodeList) {
@@ -522,20 +542,30 @@ public class SqlParser {
             return curKeywordToken;
         }
 
+        /**
+         * 3 种情形
+         * 1. "name"
+         * 2. "statment as name"
+         * 3. "statment name"
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
         private static Token buildTableNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
-            //三种情形
-            //1. "name"
-            //2. "statment as name"
-            //3. "statment name"
             for (List<SqlNode> nodes: nodeList) {
                 SqlNode tableNode = new SqlNode("`TABLE`");
 
                 if (nodes.size() == 1) {
-                    //NameNode
-                    SqlNode nameNode = new SqlNode("`NAME`");
-                    nameNode.addLast(nodes.get(0));
-                    tableNode.addLast(nameNode);
+                    if ("`STATEMENT`".equals(nodes.get(0).toString())) {
+                        tableNode.addLast(nodes.get(0));
+                    } else {
+                        //NameNode
+                        SqlNode nameNode = new SqlNode("`NAME`");
+                        nameNode.addLast(nodes.get(0));
+                        tableNode.addLast(nameNode);
+                    }
                 } else if (nodes.size() == 2 || nodes.size() == 3) {
                     //StatementNode
                     tableNode.addLast(nodes.get(0));
@@ -746,6 +776,14 @@ public class SqlParser {
             return curKeywordToken;
         }
 
+        /**
+         * 1种情形
+         * 1. group by expr, expr, ...
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
         private static Token buildGroupByNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
             for (List<SqlNode> nodes: nodeList) {
@@ -756,16 +794,7 @@ public class SqlParser {
                 int index = 0;
                 for (; index < nodes.size(); index ++) {
                     SqlNode node = nodes.get(index);
-                    if (node instanceof Token) {
-                        if ("AS".equals(node.toString().toUpperCase())) {
-                            break;
-                        } else {
-
-                            expressionTokens.addAll(((Token)node).sqlTokens);
-                        }
-                    } else {
-                        throw new RuntimeException(String.format("Invalid node class type '%s'.", node.getClass()));
-                    }
+                    expressionTokens.addAll(((Token)node).sqlTokens);
                 }
                 SqlNode exprNode = new SqlNode("`EXPR`");
                 exprNode.addLast(new Expression(expressionTokens));
@@ -776,6 +805,14 @@ public class SqlParser {
             return curKeywordToken;
         }
 
+        /**
+         * 1种情形
+         * 1. order by expr [asc|desc], expr [asc|desc], ...
+         *
+         * @param curKeywordToken
+         * @param nodeList
+         * @return
+         */
         private static Token buildOrderByNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
 
             for (List<SqlNode> nodes: nodeList) {
@@ -786,16 +823,7 @@ public class SqlParser {
                 int index = 0;
                 for (; index < nodes.size(); index ++) {
                     SqlNode node = nodes.get(index);
-                    if (node instanceof Token) {
-                        if ("AS".equals(node.toString().toUpperCase())) {
-                            break;
-                        } else {
-
-                            expressionTokens.addAll(((Token)node).sqlTokens);
-                        }
-                    } else {
-                        throw new RuntimeException(String.format("Invalid node class type '%s'.", node.getClass()));
-                    }
+                    expressionTokens.addAll(((Token)node).sqlTokens);
                 }
                 SqlNode exprNode = new SqlNode("`EXPR`");
                 exprNode.addLast(new Expression(expressionTokens));
@@ -806,7 +834,7 @@ public class SqlParser {
             return curKeywordToken;
         }
         /**
-         * 按COMMA, 分隔nodes数组
+         * 按逗号, 分隔nodes数组
          *       `(a+1) as a, b, f(x,g(y,z)) as c`
          * ==>  [`(a+1) as a`, `b`, `f(x) as c`]
          *

@@ -18,7 +18,57 @@ t
        └─ `NAME`
           └─ t
 
+[sql-011:select-distinct]
+SELECT DISTINCT Country FROM Customers
 
+[sql-011:select-distinct:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ DISTINCT Country
+ └─ `FROM`
+    └─ `TABLE`
+       └─ `NAME`
+          └─ Customers
+
+[sql-012:select-distinct]
+SELECT COUNT(DISTINCT Country) FROM Customers
+
+[sql-012:select-distinct:tree]
+`STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ COUNT ( DISTINCT Country )
+ └─ `FROM`
+    └─ `TABLE`
+       └─ `NAME`
+          └─ Customers
+
+[sql-013:select-distinct]
+SELECT Count(*) AS DistinctCountries
+FROM (SELECT DISTINCT Country FROM Customers)
+
+[sql-013:select-distinct:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     ├─ `EXPR`
+ │     │  └─ Count ( * )
+ │     └─ `NAME`
+ │        └─ DistinctCountries
+ └─ `FROM`
+    └─ `TABLE`
+       └─ `STATEMENT`
+          ├─ `SELECT`
+          │  └─ `COLUMN`
+          │     └─ `EXPR`
+          │        └─ DISTINCT Country
+          └─ `FROM`
+             └─ `TABLE`
+                └─ `NAME`
+                   └─ Customers
 
 [sql-015:simple]
 SELECT 'a' as a,b,'c' FROM t
@@ -68,9 +118,8 @@ from t
 
 
 [sql-030:EXPR]
-select 'a',substr(b, 1, 2),'c' from t
+select 'a',substr(b, 1, 2),'c', b * (a + nullif(ifnull(b, 0), c)) from t
 
-[sql-030:EXPR:tree]
  `STATEMENT`
  ├─ `SELECT`
  │  ├─ `COLUMN`
@@ -79,9 +128,12 @@ select 'a',substr(b, 1, 2),'c' from t
  │  ├─ `COLUMN`
  │  │  └─ `EXPR`
  │  │     └─ substr ( b , 1 , 2 )
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ 'c'
  │  └─ `COLUMN`
  │     └─ `EXPR`
- │        └─ 'c'
+ │        └─ b * ( a + nullif ( ifnull ( b , 0 ) , c ) )
  └─ `FROM`
     └─ `TABLE`
        └─ `NAME`
@@ -120,7 +172,96 @@ A, b
 x, y1, z
 
 
+[sql-035:where]
+SELECT * FROM Customers
+WHERE NOT Country='Germany' AND NOT Country='USA'
 
+[sql-035:where:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ *
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Customers
+ └─ `WHERE`
+    └─ NOT Country = 'Germany' AND NOT Country = 'USA'
+
+[sql-036:where]
+SELECT LastName, FirstName, Address FROM Persons
+WHERE Address IS NOT NULL
+
+[sql-036:where:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ LastName
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ FirstName
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ Address
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Persons
+ └─ `WHERE`
+    └─ Address IS NOT NULL
+
+[sql-037:where]
+SELECT t.a,d,max(b) as max_b,sum(c) as sum_c
+FROM t
+WHERE t.a IS NOT NULL
+  and b like '%'
+  and (c > 1 or c < 1)
+  and not ( c >= 1 and c <= 1)
+  and c != 1
+  and c =1
+  and c in (1,2,3)
+  and c between 1 and 3
+group by t.a,d
+--having max(b)>100
+order by max(t.b) desc, sum(c) asc
+
+[sql-037:where:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ t.a
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ d
+ │  ├─ `COLUMN`
+ │  │  ├─ `EXPR`
+ │  │  │  └─ max ( b )
+ │  │  └─ `NAME`
+ │  │     └─ max_b
+ │  └─ `COLUMN`
+ │     ├─ `EXPR`
+ │     │  └─ sum ( c )
+ │     └─ `NAME`
+ │        └─ sum_c
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ t
+ ├─ `WHERE`
+ │  └─ t.a IS NOT NULL and b like '%' and ( c > 1 or c < 1 ) and not ( c >= 1 and c <= 1 ) and c != 1 and c = 1 and c in ( 1 , 2 , 3 ) and c between 1 and 3
+ ├─ `GROUP-BY`
+ │  ├─ `EXPR`
+ │  │  └─ t.a
+ │  └─ `EXPR`
+ │     └─ d
+ └─ `ORDER-BY`
+    ├─ `EXPR`
+    │  └─ max ( t.b ) desc
+    └─ `EXPR`
+       └─ sum ( c ) asc
 
 [sql-040:join]
 select
@@ -450,15 +591,42 @@ a, b, c
 
 
 [sql-090:union]
-select a from t1
+select a from t1 where a>1
 union
-select a from t2
+select a from t2 where a=1
+union all
+select a from t3 where a=100
+order by a
 
 
 
 [sql-090:union:tree!]
 
+[sql-091:union]
+(
+  select a from t1 where a>1
+  union
+  select a from t2 where a=1
+)
+union all
+select a from t3 where a=100
+order by a
 
+[sql-091:union:tree!]
+
+
+[sql-092:union]
+
+select a from t1 where a>1
+union
+(
+  select a from t2 where a=1
+  union all
+  select a from t3 where a=100
+)
+order by a
+
+[sql-092:union:tree!]
 
 
 [sql-100:create-table]
