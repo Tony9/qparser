@@ -364,8 +364,7 @@ public class SqlParser {
                     if (curKeywordToken != null) {
 
                         if (nodes.size() > 0 || !curKeywordToken.canAppend(t)) {
-                            List<List<SqlNode>> nodeList = splitByComma(nodes);
-                            buildNode(newStatement, curKeywordToken, nodeList);
+                            buildNode(newStatement, curKeywordToken, nodes);
 
                             //reset nodes and curKeywordToken
                             nodes = new LinkedList<>();
@@ -390,14 +389,13 @@ public class SqlParser {
             //add remain all
             if (curKeywordToken != null) {
 
-                List<List<SqlNode>> nodeList = splitByComma(nodes);
-                buildNode(newStatement, curKeywordToken, nodeList);
+                buildNode(newStatement, curKeywordToken, nodes);
             }
 
             return newStatement;
         }
 
-        private static void buildNode(Statement statement, Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static void buildNode(Statement statement, Token curKeywordToken, List<SqlNode> nodeList) {
 
             Token curToken;
             String keyword = curKeywordToken.toString();
@@ -488,9 +486,11 @@ public class SqlParser {
 
             } else {
 
-                logger.error(statement.toTreeString());
-                logger.error(nodeList);
-                throw new RuntimeException(String.format("Unsupported Keywords '%s'.", keyword));
+                //TODO: 这里异常可以取消，只记录warning日志
+
+                String msg = String.format("Unsupported Keywords '%s'. \n%s\n%s",
+                        keyword, statement.toTreeString(), nodeList);
+                throw new RuntimeException(msg);
 
             }
 
@@ -499,14 +499,11 @@ public class SqlParser {
         /**
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param nodes
          * @return
          */
-        private static Token buildConditionNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildConditionNode(Token curKeywordToken, List<SqlNode> nodes) {
 
-            assert nodeList.size() == 1;
-
-            List<SqlNode> nodes = nodeList.get(0);
             List<SqlToken> expressionTokens = new ArrayList<>();
 
             int index = 0;
@@ -531,10 +528,12 @@ public class SqlParser {
          * TODO: 3. "expr name" 尚不支持
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildColumnNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildColumnNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
 
@@ -579,10 +578,12 @@ public class SqlParser {
          * 1. with a as (select ...), b as (select ...) select ...
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildWithNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildWithNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
 
@@ -615,10 +616,12 @@ public class SqlParser {
          * 3. "statment name"
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildTableNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildTableNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
                 SqlNode tableNode = new SqlNode("`TABLE`");
@@ -660,14 +663,10 @@ public class SqlParser {
          *
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param nodes
          * @return
          */
-        private static Token buildCreateTableNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
-
-            assert nodeList.size() == 1;
-
-            List<SqlNode> nodes = nodeList.get(0);
+        private static Token buildCreateTableNode(Token curKeywordToken, List<SqlNode> nodes) {
 
             if (nodes.size() >= 3 && "AS".equalsIgnoreCase(nodes.get(nodes.size()-2).toString())) {
                 //
@@ -706,14 +705,10 @@ public class SqlParser {
          *
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param nodes
          * @return
          */
-        private static Token buildInsertIntoNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
-
-            assert nodeList.size() == 1;
-
-            List<SqlNode> nodes = nodeList.get(0);
+        private static Token buildInsertIntoNode(Token curKeywordToken, List<SqlNode> nodes) {
 
             if (!"`STATEMENT`".equals(nodes.get(nodes.size()-1).toString())) {
                 //
@@ -760,15 +755,10 @@ public class SqlParser {
          *
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param nodes
          * @return
          */
-        private static Token buildUpdateNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
-
-            assert nodeList.size() == 1;
-
-            List<SqlNode> nodes = nodeList.get(0);
-
+        private static Token buildUpdateNode(Token curKeywordToken, List<SqlNode> nodes) {
 
             SqlNode tableNode = new SqlNode("`TABLE`");
 
@@ -787,10 +777,12 @@ public class SqlParser {
          *
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildSetNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildSetNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
 
@@ -822,10 +814,10 @@ public class SqlParser {
          *
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param nodes
          * @return
          */
-        private static Token buildDeleteNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildDeleteNode(Token curKeywordToken, List<SqlNode> nodes) {
 
             //do nothing
             return curKeywordToken;
@@ -836,10 +828,12 @@ public class SqlParser {
          * 1. group by expr, expr, ...
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildGroupByNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildGroupByNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
 
@@ -865,10 +859,12 @@ public class SqlParser {
          * 1. order by expr [asc|desc], expr [asc|desc], ...
          *
          * @param curKeywordToken
-         * @param nodeList
+         * @param allNodes
          * @return
          */
-        private static Token buildOrderByNode(Token curKeywordToken, List<List<SqlNode>> nodeList) {
+        private static Token buildOrderByNode(Token curKeywordToken, List<SqlNode> allNodes) {
+
+            List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
 
@@ -893,19 +889,19 @@ public class SqlParser {
          *       `(a+1) as a, b, f(x,g(y,z)) as c`
          * ==>  [`(a+1) as a`, `b`, `f(x) as c`]
          *
-         * @param nodes
+         * @param allNodes
          * @return
          */
-        private static List<List<SqlNode>> splitByComma(List<SqlNode> nodes) {
+        private static List<List<SqlNode>> splitByComma(List<SqlNode> allNodes) {
 
-            if (nodes == null || nodes.size() == 0) return null;
+            if (allNodes == null || allNodes.size() == 0) return null;
 
             List<List<SqlNode>> tokensList = new ArrayList<>();
 
             int parenCount = 0;
 
             List<SqlNode> tokens = new ArrayList<>();
-            for (SqlNode n: nodes) {
+            for (SqlNode n: allNodes) {
 
                 if (LEFT_PAREN.equals(n.toString())) {
                     parenCount ++;
