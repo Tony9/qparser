@@ -103,8 +103,8 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-//            if (!key.startsWith("[sql-090:")) { continue; }
-            if (key.indexOf("union") > -1) { continue; }
+//            if (!key.startsWith("[sql-092:")) { continue; }
+//            if ((key.indexOf("union") > -1)) { continue; }
 
             String actual = fn.apply(sql);
 
@@ -116,7 +116,9 @@ public class SqlParserTest extends TestCase {
             Assert.assertEquals(expected.toString().trim(), actual.toString().trim());
         }
 
-        logger.info(String.format("%d tests passed!", tests.length));
+        logger.info(String.format("%d tests passed!\n%s",
+                tests.length,
+                Arrays.asList(tests).stream().map(test -> test[0]).collect(Collectors.toList()).toString().replaceAll(", ", ",\n ")));
     }
 
 

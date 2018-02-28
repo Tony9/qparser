@@ -21,7 +21,8 @@ public class SqlParser {
                 "DROP TABLE",
                 "DROP INDEX",
                 //DML
-                "SELECT FROM [LEFT|RIGHT|INNER|OUTER] JOIN ON WHERE GROUP BY HAVING ORDER BY LIMIT UNION [ALL]",
+                "SELECT FROM [LEFT|RIGHT|INNER|OUTER] JOIN ON WHERE GROUP BY HAVING ORDER BY LIMIT",
+                "SELECT UNION [ALL] SELECT",
                 "WITH SELECT FROM SELECT FROM SELECT FROM",
                 "INSERT INTO VALUES",
                 "INSERT INTO SELECT FROM",
@@ -156,7 +157,20 @@ public class SqlParser {
             super("`STATEMENT`");
         }
 
+        protected Statement(String text) {
+
+            super(text);
+        }
     }
+
+    private static class UnionStatement extends Statement {
+
+        public UnionStatement() {
+
+            super("`UNION-STATEMENT`");
+        }
+    }
+
 
     public Node parse(String sql) {
         SqlTokenizer sqlTokenizer = new SqlTokenizer();
@@ -167,11 +181,13 @@ public class SqlParser {
 
     private static class SqlASTBuilder {
 
-        private static String LEFT_PAREN = "(";
-        private static String RIGHT_PAREN = ")";
-        private static String COMMA = ",";
+        private static String TOKEN_LEFT_PAREN = "(";
+        private static String TOKEN_RIGHT_PAREN = ")";
+        private static String TOKEN_COMMA = ",";
+        private static String TOKEN_UNION = "`UNION`";
+        private static String TOKEN_ALL = "`ALL`";
 
-        private static String TOKEN_SELECT = "SELECT";
+        private static String TOKEN_SELECT = "`SELECT`";
 
 
         private static class Interval<T> {
@@ -190,20 +206,20 @@ public class SqlParser {
 
         }
 
-        private static List<Interval<Integer>> findAllParenPairs(List<SqlToken> sqlTokens) {
+        private static List<Interval<Integer>> findAllParenPairs(List<Token> tokens) {
 
             List<Interval<Integer>> intervals = new ArrayList<>();
 
             LinkedList<Integer> stack = new LinkedList<>();
 
-            for (int i = 0; i < sqlTokens.size(); i++) {
+            for (int i = 0; i < tokens.size(); i++) {
 
-                SqlToken sqlToken = sqlTokens.get(i);
-                if (sqlToken.getText().equals(LEFT_PAREN)) {
+                Token token = tokens.get(i);
+                if (token.toString().equals(TOKEN_LEFT_PAREN)) {
 
                     stack.push(i);
 
-                } else if (sqlToken.getText().equals(RIGHT_PAREN)) {
+                } else if (token.toString().equals(TOKEN_RIGHT_PAREN)) {
 
                     Integer start = stack.pop();
                     Integer stop = i;
@@ -228,97 +244,157 @@ public class SqlParser {
          *  b. with-select 最后一句子句没有括弧: with a as (select from), b as (select from) select from
          *  c. insert-into 最后一句子句可不加括弧: insert into ... select，
          *
-         * @param sqlTokens
+         * 基本算法
+         *
+         * @param tokens
          * @return
          */
-        private static Statement buildNestedStatement(List<SqlToken> sqlTokens) {
+        private static Statement buildNestedStatement(List<Token> tokens) {
 
-            //
-            //处理处在括弧中的SQL子句
-            //比如
-            // 1. select from (select from ...)
-            // 2. create table t as (select from ...)
-            // 3. insert into t (select from ...)
-            //
-            Set<Integer> nestedStatementStopIndex = findAllParenPairs(sqlTokens).stream()
-                    .filter(interval -> TOKEN_SELECT.equals(sqlTokens.get(interval.start + 1).getText().toUpperCase()))
-                    .map(interval -> interval.stop)
-                    .collect(Collectors.toSet());
+            //计算Union/Union-All 位置
+            List<Token> newTokens = new ArrayList<>();
+            List<Integer> unionNodePos = new ArrayList<>();
+            int parenCount = 0;
+            for (int i = 0; i < tokens.size(); i ++) {
+                Token t = tokens.get(i);
+                String s = t.toString();
+                if (TOKEN_LEFT_PAREN.equals(s)) {
+                    parenCount ++;
+                } else if (TOKEN_RIGHT_PAREN.equals(s)) {
+                    parenCount --;
+                }
 
-            //statement
-            LinkedList<Node> stack = new LinkedList<>();
-
-            for (int i = 0; i < sqlTokens.size(); i++) {
-
-                if (nestedStatementStopIndex.contains(i)) {
-
-                    // 遍历到 "（ SELECT ... )" 的结束符号")"，创建对应的nestedStatement
-                    // 1. 找到对应的 "("
-                    // 2. 将"(", ")"之间的Node作为nestedStatement的子节点
-                    Statement nestedStatement = new Statement();
-
-                    int parenCount = 0;
-                    Node n;
-                    while (true) {
-                        n = stack.pop();
-                        if (n instanceof Token) {
-                            Token t = (Token)n;
-
-                            if (LEFT_PAREN.equals(t.toString())) {
-                                parenCount ++;
-                            } else if (RIGHT_PAREN.equals(t.toString())) {
-                                parenCount --;
-                            }
-
-                            if (parenCount == 1) {  //跳出while循环
-                                break;
-                            } else {
-                                nestedStatement.addFirst(n);
-                            }
-
+                if (parenCount == 0) {
+                    if (TOKEN_UNION.equals(s)) {
+                        unionNodePos.add(i);
+                        if (TOKEN_ALL.equals(tokens.get(i+1).toString())) {
+                            t.append(tokens.get(i+1));
+                            newTokens.add(t);
+                            i += 1;
                         } else {
-                            nestedStatement.addFirst(n);
+                            newTokens.add(t);
                         }
+                    } else {
+                        newTokens.add(t);
                     }
-
-                    stack.push(nestedStatement);
-
                 } else {
-                    SqlToken currToken = sqlTokens.get(i);
-
-                    boolean bKeyword = KEYWORDS.contains(currToken.getText().toUpperCase());
-
-                    stack.push(new Token(currToken, bKeyword));
+                    newTokens.add(t);
                 }
             }
 
             //return
-            Statement s = new Statement();
-            while (!stack.isEmpty()) {
-                Node t = stack.pop();
-                s.addFirst(t);
+            if (unionNodePos.size() > 0) {
+                return buildNestedStatementWithUnion(newTokens, unionNodePos);
+            } else {
+                return buildNestedStatementWithoutUnion(newTokens);
+            }
+        }
+
+        private static Statement buildNestedStatementWithUnion(List<Token> tokens, List<Integer> unionNodePos) {
+
+            Statement statement = new UnionStatement();
+            List<Integer> pos = new ArrayList<>();
+            pos.add(-1);
+            pos.addAll(unionNodePos);
+            pos.add(tokens.size());
+
+            for (int i = 0; i < pos.size()-1; i ++) {
+                int start = pos.get(i)+1;
+                if (TOKEN_LEFT_PAREN.equals(tokens.get(start).toString())) start ++;
+                int end = pos.get(i+1);
+                if (end-1 < tokens.size() && TOKEN_RIGHT_PAREN.equals(tokens.get(end-1).toString())) end --;
+
+                List<Token> subTokens = new ArrayList<>();
+                for (int k = start; k < end; k ++) subTokens.add(tokens.get(k));
+
+                statement.addLast(buildNestedStatement(subTokens));
+                if (i < pos.size()-2) statement.addLast(tokens.get(pos.get(i+1)));
+            }
+
+            return rebuildLastSelectStatement(statement);
+        }
+
+        /**
+         *
+         *
+         * 处理嵌套的SQL子句。
+         * 要求：嵌套SQL必须在括弧中
+         *
+         * 比如
+         * 1. select from (select from (select from ...))
+         * 2. create table t as (select from ...)
+         * 3. insert into t (select from ...)
+         *
+         * @param tokens
+         * @return
+         */
+        private static Statement buildNestedStatementWithoutUnion(List<Token> tokens) {
+
+            //
+            //找到第一层嵌套语句
+            //
+
+            //找到所有select子句 （注意, 所有的子句都是select语句）
+            List<Interval<Integer>> allSubQueryPairs = findAllParenPairs(tokens).stream()
+                    .filter(interval -> TOKEN_SELECT.equals(tokens.get(interval.start + 1).toString()))
+                    .collect(Collectors.toList());
+
+            //找到最外层的select子句
+            List<Interval<Integer>> topSubQuery = allSubQueryPairs.stream()
+                    .filter(interval -> !allSubQueryPairs.stream().anyMatch(p -> p.start < interval.start && p.stop > interval.stop))
+                    .collect(Collectors.toList());
+
+            Map<Integer, Interval<Integer>> map = new HashMap<>();
+            for (Interval<Integer> interval: topSubQuery) {
+                map.put(interval.start, interval);
             }
 
             //
-            //下面场景中，结尾处的select子句前后是可以不带括弧的
-            //1. with..select
-            //2. insert into..select
+            // 递归执行
             //
-            if ("`WITH`".equals(s.getChildren().get(0).toString())
-                    || "`INSERT`".equals(s.getChildren().get(0).toString())) {
+            Statement statement = new Statement();
 
-                LinkedList<Node<SqlNode>> nodes = s.getChildren();
-                int lastSelectIndex = nodes.size()-1;
-                for (; lastSelectIndex > -1; lastSelectIndex --) {
-                    if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
-                        break;
-                    }
+            int parenCount = 0;
+            for (int i = 0; i < tokens.size(); i ++) {
+                Token t = tokens.get(i);
+
+                if (map.containsKey(i)) {
+                    Interval<Integer> interval = map.get(i);
+                    List<Token> newTokens = new ArrayList<>();
+                    for (int k = i+1; k < interval.stop; k ++) newTokens.add(tokens.get(k));
+                    statement.addLast(buildNestedStatement(newTokens));
+
+                    i = interval.stop;
+                } else {
+                    statement.addLast(t);
                 }
+            }
 
-                if (lastSelectIndex == -1) {
-                    throw new RuntimeException(String.format("Missing last select caluse in with..select statement."));
+            return rebuildLastSelectStatement(statement);
+        }
+
+        /**
+         *
+         * 下面场景中，结尾处的select子句前后是可以不带括弧的
+         * 1. with..select
+         * 2. insert into..select
+         * 3. select union [all] select
+         *
+         *
+         * @param s
+         * @return
+         */
+        private static Statement rebuildLastSelectStatement(Statement s) {
+
+            LinkedList<Node<SqlNode>> nodes = s.getChildren();
+            int lastSelectIndex = nodes.size()-1;
+            for (; lastSelectIndex > -1; lastSelectIndex --) {
+                if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
+                    break;
                 }
+            }
 
+            if (lastSelectIndex > 0) {
                 Statement newStatement = new Statement();
                 for (int i = 0; i < lastSelectIndex; i ++) {
                     newStatement.addLast(nodes.get(i));
@@ -331,23 +407,55 @@ public class SqlParser {
                 newStatement.addLast(lastSelectStatement);
 
                 return newStatement;
-
             } else {
                 return s;
             }
         }
 
         /**
-         * 遍历指定statement对象的子节点
-         * 1. 把SQL关键字后面的节点调整为当前关键字的子节点
-         * 2. 合并同级Token之间的字符
          *
-         * 注意，必须传入Nested Statement。
+         * @param unionStatement
+         * @return
+         */
+        private static Statement buildUnionStatementNode(UnionStatement unionStatement) {
+
+            LinkedList<Node<SqlNode>> children = unionStatement.getChildren();
+
+            //stack: A1 u1 A2 u2 A3 u3 A4
+            //每次出栈三个元素 X u Y，将结果 X u Y 放回栈
+            LinkedList<Node<SqlNode>> stack = new LinkedList<>();
+            for (Node<SqlNode> n: children) {
+                stack.add(n);
+            }
+            while (stack.size() >= 3) {
+                Node s1 = stack.pop();
+                if (s1 instanceof Statement) s1 = buildNodes((Statement)s1);
+
+                Node n = stack.pop();
+
+                Statement s2 = (Statement)stack.pop();
+                if (s2 instanceof Statement) s2 = buildNodes((Statement)s2);
+
+                n.addLast(s1);
+                n.addLast(s2);
+
+                stack.push(n);
+            }
+
+            Statement newStatement = new Statement();
+
+            newStatement.addLast(stack.pop());
+
+
+            return newStatement;
+        }
+
+        /**
          *
          * @param nestedStatement
          * @return
          */
-        private static Statement buildNodes(Statement nestedStatement) {
+        private static Statement buildNotUnionStatementNode(Statement nestedStatement) {
 
             Statement newStatement = new Statement();
 
@@ -374,6 +482,7 @@ public class SqlParser {
                             curKeywordToken.append(t);
                         }
 
+
                     } else {
                         curKeywordToken = new Token(t);
                     }
@@ -393,6 +502,27 @@ public class SqlParser {
             }
 
             return newStatement;
+        }
+
+        /**
+         * 遍历指定statement对象的子节点
+         * 1. 把SQL关键字后面的节点调整为当前关键字的子节点
+         * 2. 合并同级Token之间的字符
+         *
+         * 注意，必须传入Nested Statement。
+         *
+         * @param nestedStatement
+         * @return
+         */
+        private static Statement buildNodes(Statement nestedStatement) {
+
+
+            if (nestedStatement instanceof UnionStatement) {
+                return buildUnionStatementNode((UnionStatement) nestedStatement);
+            } else {
+                return buildNotUnionStatementNode(nestedStatement);
+            }
+
         }
 
         private static void buildNode(Statement statement, Token curKeywordToken, List<SqlNode> nodeList) {
@@ -482,6 +612,8 @@ public class SqlParser {
 
             } else if ("`UNION`".equals(keyword) || "`UNION-ALL`".equals(keyword)) {
 
+                curToken = buildUnionNode(curKeywordToken, nodeList);
+                statement.addLast(curToken);
                 //TODO: 尚未支持
 
             } else {
@@ -518,6 +650,18 @@ public class SqlParser {
 
             //append ConidtionNode
             curKeywordToken.addLast(new Expression(expressionTokens));
+            return curKeywordToken;
+        }
+
+        /**
+         *
+         * @param curKeywordToken
+         * @param nodes
+         * @return
+         */
+        private static Token buildUnionNode(Token curKeywordToken, List<SqlNode> nodes) {
+
+            curKeywordToken.addAll(nodes);
             return curKeywordToken;
         }
 
@@ -903,13 +1047,13 @@ public class SqlParser {
             List<SqlNode> tokens = new ArrayList<>();
             for (SqlNode n: allNodes) {
 
-                if (LEFT_PAREN.equals(n.toString())) {
+                if (TOKEN_LEFT_PAREN.equals(n.toString())) {
                     parenCount ++;
                     tokens.add(n);
-                } else if (RIGHT_PAREN.equals(n.toString())) {
+                } else if (TOKEN_RIGHT_PAREN.equals(n.toString())) {
                     parenCount --;
                     tokens.add(n);
-                } else if (COMMA.equals(n.toString())) {
+                } else if (TOKEN_COMMA.equals(n.toString())) {
                     if (parenCount == 0) {
                         tokensList.add(tokens);
                         tokens = new ArrayList<>();
@@ -934,7 +1078,18 @@ public class SqlParser {
          */
         public static Node buildSimpleAST(List<SqlToken> sqlTokens) {
 
-            Statement statement = buildNestedStatement(sqlTokens);
+            //更新Keywords
+            List<Token> tokens = new ArrayList<>();
+            for (int i = 0; i < sqlTokens.size(); i ++) {
+                SqlToken currToken = sqlTokens.get(i);
+
+                boolean bKeyword = KEYWORDS.contains(currToken.getText().toUpperCase());
+
+                tokens.add(new Token(currToken, bKeyword));
+            }
+
+            //GO
+            Statement statement = buildNestedStatement(tokens);
             statement = buildNodes(statement);
             return statement;
 

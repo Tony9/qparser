@@ -396,10 +396,149 @@ a
           └─ t3
 
 
+[sql-061:sub-query]
+select a
+from (select b from t1) x,
+  (select c from
+    (select c from t3)
+  t2) y
+
+
+[sql-061:sub-query:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ a
+ └─ `FROM`
+    ├─ `TABLE`
+    │  ├─ `STATEMENT`
+    │  │  ├─ `SELECT`
+    │  │  │  └─ `COLUMN`
+    │  │  │     └─ `EXPR`
+    │  │  │        └─ b
+    │  │  └─ `FROM`
+    │  │     └─ `TABLE`
+    │  │        └─ `NAME`
+    │  │           └─ t1
+    │  └─ `NAME`
+    │     └─ x
+    └─ `TABLE`
+       ├─ `STATEMENT`
+       │  ├─ `SELECT`
+       │  │  └─ `COLUMN`
+       │  │     └─ `EXPR`
+       │  │        └─ c
+       │  └─ `FROM`
+       │     └─ `TABLE`
+       │        ├─ `STATEMENT`
+       │        │  ├─ `SELECT`
+       │        │  │  └─ `COLUMN`
+       │        │  │     └─ `EXPR`
+       │        │  │        └─ c
+       │        │  └─ `FROM`
+       │        │     └─ `TABLE`
+       │        │        └─ `NAME`
+       │        │           └─ t3
+       │        └─ `NAME`
+       │           └─ t2
+       └─ `NAME`
+          └─ y
+
+[sql-062:sub-query]
+select *
+from (
+   select a1 from x1
+   ) x, (
+     select b1 from (
+      select b2 from y2
+     ) y1
+  ) y, (
+     select c1 from (
+      select c2 from (
+        select c3 from z3
+      ) z2
+     ) z1
+  ) z
+
+[sql-062:sub-query:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ *
+ └─ `FROM`
+    ├─ `TABLE`
+    │  ├─ `STATEMENT`
+    │  │  ├─ `SELECT`
+    │  │  │  └─ `COLUMN`
+    │  │  │     └─ `EXPR`
+    │  │  │        └─ a1
+    │  │  └─ `FROM`
+    │  │     └─ `TABLE`
+    │  │        └─ `NAME`
+    │  │           └─ x1
+    │  └─ `NAME`
+    │     └─ x
+    ├─ `TABLE`
+    │  ├─ `STATEMENT`
+    │  │  ├─ `SELECT`
+    │  │  │  └─ `COLUMN`
+    │  │  │     └─ `EXPR`
+    │  │  │        └─ b1
+    │  │  └─ `FROM`
+    │  │     └─ `TABLE`
+    │  │        ├─ `STATEMENT`
+    │  │        │  ├─ `SELECT`
+    │  │        │  │  └─ `COLUMN`
+    │  │        │  │     └─ `EXPR`
+    │  │        │  │        └─ b2
+    │  │        │  └─ `FROM`
+    │  │        │     └─ `TABLE`
+    │  │        │        └─ `NAME`
+    │  │        │           └─ y2
+    │  │        └─ `NAME`
+    │  │           └─ y1
+    │  └─ `NAME`
+    │     └─ y
+    └─ `TABLE`
+       ├─ `STATEMENT`
+       │  ├─ `SELECT`
+       │  │  └─ `COLUMN`
+       │  │     └─ `EXPR`
+       │  │        └─ c1
+       │  └─ `FROM`
+       │     └─ `TABLE`
+       │        ├─ `STATEMENT`
+       │        │  ├─ `SELECT`
+       │        │  │  └─ `COLUMN`
+       │        │  │     └─ `EXPR`
+       │        │  │        └─ c2
+       │        │  └─ `FROM`
+       │        │     └─ `TABLE`
+       │        │        ├─ `STATEMENT`
+       │        │        │  ├─ `SELECT`
+       │        │        │  │  └─ `COLUMN`
+       │        │        │  │     └─ `EXPR`
+       │        │        │  │        └─ c3
+       │        │        │  └─ `FROM`
+       │        │        │     └─ `TABLE`
+       │        │        │        └─ `NAME`
+       │        │        │           └─ z3
+       │        │        └─ `NAME`
+       │        │           └─ z2
+       │        └─ `NAME`
+       │           └─ z1
+       └─ `NAME`
+          └─ z
+
 
 
 [sql-065:sub-query]
-select * from ( select (a+1) as a from t) t1, (select b+f(x,y) as b from (select c from t3) t2) t2 where (1=1 or 1=3) and name like '%'
+select *
+from
+  ( select (a+1) as a from t) t1,
+  (select b+f(x,y) as b from (select c from t3) t2) t2 where (1=1 or 1=3) and name like '%'
 
 
 [sql-065:sub-query:find-all-tables]
@@ -601,41 +740,172 @@ select a from t3 where a=100
 order by a
 
 [sql-090:union:tree]
-STATEMENT
-  UNION-ALL
-    UNION
-      SELECT t1
-      SELECT t2
-    SELECT t3
-  ORDER-BY
+`STATEMENT`
+ └─ `UNION-ALL`
+    ├─ `UNION`
+    │  ├─ `STATEMENT`
+    │  │  ├─ `SELECT`
+    │  │  │  └─ `COLUMN`
+    │  │  │     └─ `EXPR`
+    │  │  │        └─ a
+    │  │  ├─ `FROM`
+    │  │  │  └─ `TABLE`
+    │  │  │     └─ `NAME`
+    │  │  │        └─ t1
+    │  │  └─ `WHERE`
+    │  │     └─ a > 1
+    │  └─ `STATEMENT`
+    │     ├─ `SELECT`
+    │     │  └─ `COLUMN`
+    │     │     └─ `EXPR`
+    │     │        └─ a
+    │     ├─ `FROM`
+    │     │  └─ `TABLE`
+    │     │     └─ `NAME`
+    │     │        └─ t2
+    │     └─ `WHERE`
+    │        └─ a = 1
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ a
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     └─ `NAME`
+       │        └─ t3
+       ├─ `WHERE`
+       │  └─ a = 100
+       └─ `ORDER-BY`
+          └─ `EXPR`
+             └─ a
 
 
 [sql-091:union]
 (
-  select a from t1 where a>1
+  select a from t1 where a<1
   union
   select a from t2 where a=1
+  union all
+  select a from t3 where a>1
 )
 union all
-select a from t3 where a=100
+select a from t4
 order by a
 
-[sql-091:union:tree!]
-
+[sql-091:union:tree]
+`STATEMENT`
+ └─ `UNION-ALL`
+    ├─ `STATEMENT`
+    │  └─ `UNION-ALL`
+    │     ├─ `UNION`
+    │     │  ├─ `STATEMENT`
+    │     │  │  ├─ `SELECT`
+    │     │  │  │  └─ `COLUMN`
+    │     │  │  │     └─ `EXPR`
+    │     │  │  │        └─ a
+    │     │  │  ├─ `FROM`
+    │     │  │  │  └─ `TABLE`
+    │     │  │  │     └─ `NAME`
+    │     │  │  │        └─ t1
+    │     │  │  └─ `WHERE`
+    │     │  │     └─ a < 1
+    │     │  └─ `STATEMENT`
+    │     │     ├─ `SELECT`
+    │     │     │  └─ `COLUMN`
+    │     │     │     └─ `EXPR`
+    │     │     │        └─ a
+    │     │     ├─ `FROM`
+    │     │     │  └─ `TABLE`
+    │     │     │     └─ `NAME`
+    │     │     │        └─ t2
+    │     │     └─ `WHERE`
+    │     │        └─ a = 1
+    │     └─ `STATEMENT`
+    │        ├─ `SELECT`
+    │        │  └─ `COLUMN`
+    │        │     └─ `EXPR`
+    │        │        └─ a
+    │        ├─ `FROM`
+    │        │  └─ `TABLE`
+    │        │     └─ `NAME`
+    │        │        └─ t3
+    │        └─ `WHERE`
+    │           └─ a > 1
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ a
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     └─ `NAME`
+       │        └─ t4
+       └─ `ORDER-BY`
+          └─ `EXPR`
+             └─ a
 
 [sql-092:union]
 
 select a from t1 where a>1
 union
-(
+select a from (
   select a from t2 where a=1
   union all
   select a from t3 where a=100
-)
+) t
 order by a
 
-[sql-092:union:tree!]
-
+[sql-092:union:tree]
+`STATEMENT`
+ └─ `UNION`
+    ├─ `STATEMENT`
+    │  ├─ `SELECT`
+    │  │  └─ `COLUMN`
+    │  │     └─ `EXPR`
+    │  │        └─ a
+    │  ├─ `FROM`
+    │  │  └─ `TABLE`
+    │  │     └─ `NAME`
+    │  │        └─ t1
+    │  └─ `WHERE`
+    │     └─ a > 1
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ a
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     ├─ `STATEMENT`
+       │     │  └─ `UNION-ALL`
+       │     │     ├─ `STATEMENT`
+       │     │     │  ├─ `SELECT`
+       │     │     │  │  └─ `COLUMN`
+       │     │     │  │     └─ `EXPR`
+       │     │     │  │        └─ a
+       │     │     │  ├─ `FROM`
+       │     │     │  │  └─ `TABLE`
+       │     │     │  │     └─ `NAME`
+       │     │     │  │        └─ t2
+       │     │     │  └─ `WHERE`
+       │     │     │     └─ a = 1
+       │     │     └─ `STATEMENT`
+       │     │        ├─ `SELECT`
+       │     │        │  └─ `COLUMN`
+       │     │        │     └─ `EXPR`
+       │     │        │        └─ a
+       │     │        ├─ `FROM`
+       │     │        │  └─ `TABLE`
+       │     │        │     └─ `NAME`
+       │     │        │        └─ t3
+       │     │        └─ `WHERE`
+       │     │           └─ a = 100
+       │     └─ `NAME`
+       │        └─ t
+       └─ `ORDER-BY`
+          └─ `EXPR`
+             └─ a
 
 [sql-093:union]
 
@@ -647,12 +917,42 @@ union all
 
 
 [sql-093:union:tree]
-STATEMENT
-  UNION-ALL
-    UNION
-      SELECT t1
-      SELECT t2
-    SELECT t3
+`STATEMENT`
+ └─ `UNION-ALL`
+    ├─ `UNION`
+    │  ├─ `STATEMENT`
+    │  │  ├─ `SELECT`
+    │  │  │  └─ `COLUMN`
+    │  │  │     └─ `EXPR`
+    │  │  │        └─ a
+    │  │  ├─ `FROM`
+    │  │  │  └─ `TABLE`
+    │  │  │     └─ `NAME`
+    │  │  │        └─ t1
+    │  │  └─ `WHERE`
+    │  │     └─ a > 1
+    │  └─ `STATEMENT`
+    │     ├─ `SELECT`
+    │     │  └─ `COLUMN`
+    │     │     └─ `EXPR`
+    │     │        └─ a
+    │     ├─ `FROM`
+    │     │  └─ `TABLE`
+    │     │     └─ `NAME`
+    │     │        └─ t2
+    │     └─ `WHERE`
+    │        └─ a = 1
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ a
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     └─ `NAME`
+       │        └─ t3
+       └─ `WHERE`
+          └─ a = 100
 
 
 
