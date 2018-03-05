@@ -106,7 +106,7 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-            if (!key.startsWith("[sql-131:")) { continue; }
+            if (!key.startsWith("[sql-111:")) { continue; }
 //            if ((key.indexOf("[sql-081:") > -1)) { continue; }
 
             String actual = fn.apply(sql);
@@ -138,23 +138,23 @@ public class SqlParserTest extends TestCase {
 
     public void test_CalciteParser() {
 
-        runTests("tree", sql -> {
-
-            org.apache.calcite.sql.parser.SqlParser.Config config =  org.apache.calcite.sql.parser.SqlParser.Config.DEFAULT;
-            config = org.apache.calcite.sql.parser.SqlParser.configBuilder().setUnquotedCasing(Casing.UNCHANGED).build();
-
-            logger.info(String.format("\n%s\n", sql));
-            org.apache.calcite.sql.parser.SqlParser sqlParser = org.apache.calcite.sql.parser.SqlParser.create(sql, config);
-            SqlNode query = null;
-            try {
-                query = sqlParser.parseQuery();
-                logger.info(String.format("\n%s\n------------------------", query.toString()));
-            } catch (SqlParseException e) {
-                logger.error(String.format("\nERROR\n"));
-            }
-
-            return "";
-        });
+//        runTests("tree", sql -> {
+//
+//            org.apache.calcite.sql.parser.SqlParser.Config config =  org.apache.calcite.sql.parser.SqlParser.Config.DEFAULT;
+//            config = org.apache.calcite.sql.parser.SqlParser.configBuilder().setUnquotedCasing(Casing.UNCHANGED).build();
+//
+//            logger.info(String.format("\n%s\n", sql));
+//            org.apache.calcite.sql.parser.SqlParser sqlParser = org.apache.calcite.sql.parser.SqlParser.create(sql, config);
+//            SqlNode query = null;
+//            try {
+//                query = sqlParser.parseQuery();
+//                logger.info(String.format("\n%s\n------------------------", query.toString()));
+//            } catch (SqlParseException e) {
+//                logger.error(String.format("\nERROR\n"));
+//            }
+//
+//            return "";
+//        });
 
     }
 
