@@ -1,5 +1,9 @@
+
+
+
+
 [sql-010:simple]
-select 'a','b' from t
+select 'a','b' from t order by 1
 
 [sql-010:simple:find-all-tables]
 t
@@ -13,10 +17,13 @@ t
  │  └─ `COLUMN`
  │     └─ `EXPR`
  │        └─ 'b'
- └─ `FROM`
-    └─ `TABLE`
-       └─ `NAME`
-          └─ t
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ t
+ └─ `ORDER-BY`
+    └─ `EXPR`
+       └─ 1
 
 [sql-011:select-distinct]
 SELECT DISTINCT Country FROM Customers
@@ -731,12 +738,90 @@ a, b, c
                 └─ t1
 
 
+[sql-081:with-query]
+with
+t_x as (
+  select a1 as a from t1
+  union all
+  select a2 as a from t3
+),
+t_y as (
+  select b+f(x,y) as b from t2
+)
+select a,b,c from t_x,t_y,t1
+
+[sql-081:with-query:tree]
+ `STATEMENT`
+ └─ `WITH`
+    ├─ `WITH-SELECT`
+    │  ├─ `NAME`
+    │  │  └─ t_x
+    │  └─ `STATEMENT`
+    │     └─ `UNION-ALL`
+    │        ├─ `STATEMENT`
+    │        │  ├─ `SELECT`
+    │        │  │  └─ `COLUMN`
+    │        │  │     ├─ `EXPR`
+    │        │  │     │  └─ a1
+    │        │  │     └─ `NAME`
+    │        │  │        └─ a
+    │        │  └─ `FROM`
+    │        │     └─ `TABLE`
+    │        │        └─ `NAME`
+    │        │           └─ t1
+    │        └─ `STATEMENT`
+    │           ├─ `SELECT`
+    │           │  └─ `COLUMN`
+    │           │     ├─ `EXPR`
+    │           │     │  └─ a2
+    │           │     └─ `NAME`
+    │           │        └─ a
+    │           └─ `FROM`
+    │              └─ `TABLE`
+    │                 └─ `NAME`
+    │                    └─ t3
+    ├─ `WITH-SELECT`
+    │  ├─ `NAME`
+    │  │  └─ t_y
+    │  └─ `STATEMENT`
+    │     ├─ `SELECT`
+    │     │  └─ `COLUMN`
+    │     │     ├─ `EXPR`
+    │     │     │  └─ b + f ( x , y )
+    │     │     └─ `NAME`
+    │     │        └─ b
+    │     └─ `FROM`
+    │        └─ `TABLE`
+    │           └─ `NAME`
+    │              └─ t2
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ a
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ b
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ c
+       └─ `FROM`
+          ├─ `TABLE`
+          │  └─ `NAME`
+          │     └─ t_x
+          ├─ `TABLE`
+          │  └─ `NAME`
+          │     └─ t_y
+          └─ `TABLE`
+             └─ `NAME`
+                └─ t1
+
 [sql-090:union]
 select a from t1 where a>1
 union
 select a from t2 where a=1
 union all
-select a from t3 where a=100
+select a from (select b from t3 order by b) t4 where a=100
 order by a
 
 [sql-090:union:tree]
@@ -772,8 +857,20 @@ order by a
        │        └─ a
        ├─ `FROM`
        │  └─ `TABLE`
+       │     ├─ `STATEMENT`
+       │     │  ├─ `SELECT`
+       │     │  │  └─ `COLUMN`
+       │     │  │     └─ `EXPR`
+       │     │  │        └─ b
+       │     │  ├─ `FROM`
+       │     │  │  └─ `TABLE`
+       │     │  │     └─ `NAME`
+       │     │  │        └─ t3
+       │     │  └─ `ORDER-BY`
+       │     │     └─ `EXPR`
+       │     │        └─ b
        │     └─ `NAME`
-       │        └─ t3
+       │        └─ t4
        ├─ `WHERE`
        │  └─ a = 100
        └─ `ORDER-BY`
@@ -954,14 +1051,99 @@ union all
        └─ `WHERE`
           └─ a = 100
 
+[sql-094:union]
+
+select a1 from (
+  select a2 from x1
+) x2
+where a3=1
+
+union
+
+select a4 from (
+  select a5 from (
+    select a6 from y2 where a=2
+    union all
+    select a7 from y3 where a=3
+  ) y4
+) y5
+where a8=4
+
+[sql-094:union:tree]
+ `STATEMENT`
+ └─ `UNION`
+    ├─ `STATEMENT`
+    │  ├─ `SELECT`
+    │  │  └─ `COLUMN`
+    │  │     └─ `EXPR`
+    │  │        └─ a1
+    │  ├─ `FROM`
+    │  │  └─ `TABLE`
+    │  │     ├─ `STATEMENT`
+    │  │     │  ├─ `SELECT`
+    │  │     │  │  └─ `COLUMN`
+    │  │     │  │     └─ `EXPR`
+    │  │     │  │        └─ a2
+    │  │     │  └─ `FROM`
+    │  │     │     └─ `TABLE`
+    │  │     │        └─ `NAME`
+    │  │     │           └─ x1
+    │  │     └─ `NAME`
+    │  │        └─ x2
+    │  └─ `WHERE`
+    │     └─ a3 = 1
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ a4
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     ├─ `STATEMENT`
+       │     │  ├─ `SELECT`
+       │     │  │  └─ `COLUMN`
+       │     │  │     └─ `EXPR`
+       │     │  │        └─ a5
+       │     │  └─ `FROM`
+       │     │     └─ `TABLE`
+       │     │        ├─ `STATEMENT`
+       │     │        │  └─ `UNION-ALL`
+       │     │        │     ├─ `STATEMENT`
+       │     │        │     │  ├─ `SELECT`
+       │     │        │     │  │  └─ `COLUMN`
+       │     │        │     │  │     └─ `EXPR`
+       │     │        │     │  │        └─ a6
+       │     │        │     │  ├─ `FROM`
+       │     │        │     │  │  └─ `TABLE`
+       │     │        │     │  │     └─ `NAME`
+       │     │        │     │  │        └─ y2
+       │     │        │     │  └─ `WHERE`
+       │     │        │     │     └─ a = 2
+       │     │        │     └─ `STATEMENT`
+       │     │        │        ├─ `SELECT`
+       │     │        │        │  └─ `COLUMN`
+       │     │        │        │     └─ `EXPR`
+       │     │        │        │        └─ a7
+       │     │        │        ├─ `FROM`
+       │     │        │        │  └─ `TABLE`
+       │     │        │        │     └─ `NAME`
+       │     │        │        │        └─ y3
+       │     │        │        └─ `WHERE`
+       │     │        │           └─ a = 3
+       │     │        └─ `NAME`
+       │     │           └─ y4
+       │     └─ `NAME`
+       │        └─ y5
+       └─ `WHERE`
+          └─ a8 = 4
 
 
 [sql-100:create-table]
 create    table qtemp/t_xxx as (
-  select #a,substr(b, #start, #end), 'select * from t', rank(a partition  b) from t
+  select #a,substr(b, #start, #end), 'select * from t', rank() over(partition by a order by b asc, c desc) as d from t
 )with data
 
-[sql-100:create-table:tree]
+[sql-100:create-table:tree!]
 `STATEMENT`
  ├─ `CREATE-TABLE`
  │  ├─ `NAME`
@@ -1106,3 +1288,275 @@ DELETE * FROM Customers
     └─ `TABLE`
        └─ `NAME`
           └─ Customers
+
+[sql-140:window-function]
+SELECT STREAM
+  HOP_END(rowtime, INTERVAL '1' HOUR, INTERVAL '3' HOUR) AS rowtime,
+  COUNT(*) AS c,
+  SUM(units) AS units
+FROM Orders
+GROUP BY HOP(rowtime, INTERVAL '1' HOUR, INTERVAL '3' HOUR)
+
+[sql-140:window-function:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  ├─ `EXPR`
+ │  │  │  └─ STREAM HOP_END ( rowtime , INTERVAL '1' HOUR , INTERVAL '3' HOUR )
+ │  │  └─ `NAME`
+ │  │     └─ rowtime
+ │  ├─ `COLUMN`
+ │  │  ├─ `EXPR`
+ │  │  │  └─ COUNT ( * )
+ │  │  └─ `NAME`
+ │  │     └─ c
+ │  └─ `COLUMN`
+ │     ├─ `EXPR`
+ │     │  └─ SUM ( units )
+ │     └─ `NAME`
+ │        └─ units
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Orders
+ └─ `GROUP-BY`
+    └─ `EXPR`
+       └─ HOP ( rowtime , INTERVAL '1' HOUR , INTERVAL '3' HOUR )
+
+[sql-141:window-function]
+SELECT STREAM TUMBLE_END(rowtime, INTERVAL '1' HOUR) AS rowtime,
+  productId,
+  COUNT(*) AS c,
+  SUM(units) AS units
+FROM Orders
+GROUP BY TUMBLE(rowtime, INTERVAL '1' HOUR), productId
+
+[sql-141:window-function:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  ├─ `EXPR`
+ │  │  │  └─ STREAM TUMBLE_END ( rowtime , INTERVAL '1' HOUR )
+ │  │  └─ `NAME`
+ │  │     └─ rowtime
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ productId
+ │  ├─ `COLUMN`
+ │  │  ├─ `EXPR`
+ │  │  │  └─ COUNT ( * )
+ │  │  └─ `NAME`
+ │  │     └─ c
+ │  └─ `COLUMN`
+ │     ├─ `EXPR`
+ │     │  └─ SUM ( units )
+ │     └─ `NAME`
+ │        └─ units
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Orders
+ └─ `GROUP-BY`
+    ├─ `EXPR`
+    │  └─ TUMBLE ( rowtime , INTERVAL '1' HOUR )
+    └─ `EXPR`
+       └─ productId
+
+[sql-142:window-function]
+SELECT STREAM HOP_END(rowtime),
+  productId,
+  SUM(unitPrice * EXP((rowtime - HOP_START(rowtime)) SECOND / INTERVAL '1' HOUR))
+   / SUM(EXP((rowtime - HOP_START(rowtime)) SECOND / INTERVAL '1' HOUR))
+FROM Orders
+GROUP BY HOP(rowtime, INTERVAL '1' SECOND, INTERVAL '1' HOUR),
+  productId
+
+[sql-142:window-function:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ STREAM HOP_END ( rowtime )
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ productId
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ SUM ( unitPrice * EXP ( ( rowtime - HOP_START ( rowtime ) ) SECOND / INTERVAL '1' HOUR ) ) / SUM ( EXP ( ( rowtime - HOP_START ( rowtime ) ) SECOND / INTERVAL '1' HOUR ) )
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `NAME`
+ │        └─ Orders
+ └─ `GROUP-BY`
+    ├─ `EXPR`
+    │  └─ HOP ( rowtime , INTERVAL '1' SECOND , INTERVAL '1' HOUR )
+    └─ `EXPR`
+       └─ productId
+
+[sql-143:window-function]
+SELECT STREAM rowtime, productId
+FROM (
+  SELECT TUMBLE_END(rowtime, INTERVAL '1' HOUR) AS rowtime,
+    productId,
+    COUNT(*) AS c,
+    SUM(units) AS su
+  FROM Orders
+  GROUP BY TUMBLE(rowtime, INTERVAL '1' HOUR), productId)
+WHERE c > 2 OR su > 10
+
+[sql-143:window-function:tree]
+ `STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ STREAM rowtime
+ │  └─ `COLUMN`
+ │     └─ `EXPR`
+ │        └─ productId
+ ├─ `FROM`
+ │  └─ `TABLE`
+ │     └─ `STATEMENT`
+ │        ├─ `SELECT`
+ │        │  ├─ `COLUMN`
+ │        │  │  ├─ `EXPR`
+ │        │  │  │  └─ TUMBLE_END ( rowtime , INTERVAL '1' HOUR )
+ │        │  │  └─ `NAME`
+ │        │  │     └─ rowtime
+ │        │  ├─ `COLUMN`
+ │        │  │  └─ `EXPR`
+ │        │  │     └─ productId
+ │        │  ├─ `COLUMN`
+ │        │  │  ├─ `EXPR`
+ │        │  │  │  └─ COUNT ( * )
+ │        │  │  └─ `NAME`
+ │        │  │     └─ c
+ │        │  └─ `COLUMN`
+ │        │     ├─ `EXPR`
+ │        │     │  └─ SUM ( units )
+ │        │     └─ `NAME`
+ │        │        └─ su
+ │        ├─ `FROM`
+ │        │  └─ `TABLE`
+ │        │     └─ `NAME`
+ │        │        └─ Orders
+ │        └─ `GROUP-BY`
+ │           ├─ `EXPR`
+ │           │  └─ TUMBLE ( rowtime , INTERVAL '1' HOUR )
+ │           └─ `EXPR`
+ │              └─ productId
+ └─ `WHERE`
+    └─ c > 2 OR su > 10
+
+[sql-144:window-function]
+SELECT STREAM *
+FROM (
+  SELECT STREAM rowtime,
+    productId,
+    units,
+    AVG(units) OVER product (RANGE INTERVAL '10' MINUTE PRECEDING) AS m10,
+    AVG(units) OVER product (RANGE INTERVAL '7' DAY PRECEDING) AS d7
+  FROM Orders
+  WINDOW product AS (
+    ORDER BY rowtime
+    PARTITION BY productId))
+WHERE m10 > d7
+
+[sql-144:window-function:tree!]
+
+[sql-145:window-function]
+SELECT STREAM rowtime,
+  productId,
+  units,
+  SUM(units) OVER (PARTITION BY FLOOR(rowtime TO HOUR)) AS unitsSinceTopOfHour
+FROM Orders
+
+[sql-145:window-function:tree!]
+
+[sql-150:flink]
+insert into table3
+select
+  11911 as a,
+  tumble_start(rowtime, 60, 'sec') as xxx,
+  tumble_end(rowtime, 60, 'sec'),
+  t1.c1, t2.c1
+from table1 as t1
+join (select a from b union select a from b union all select c from d) t2 on t2.c1=t1.c1
+where message in (1111,112)
+group by tumble(rowtime, 60, 'sec'), t1.c1
+
+[sql-150:flink:tree]
+
+`STATEMENT`
+ └─ `INSERT-INTO`
+    ├─ `TABLE`
+    │  └─ `NAME`
+    │     └─ table3
+    └─ `STATEMENT`
+       ├─ `SELECT`
+       │  ├─ `COLUMN`
+       │  │  ├─ `EXPR`
+       │  │  │  └─ 11911
+       │  │  └─ `NAME`
+       │  │     └─ a
+       │  ├─ `COLUMN`
+       │  │  ├─ `EXPR`
+       │  │  │  └─ tumble_start ( rowtime , 60 , 'sec' )
+       │  │  └─ `NAME`
+       │  │     └─ xxx
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ tumble_end ( rowtime , 60 , 'sec' )
+       │  ├─ `COLUMN`
+       │  │  └─ `EXPR`
+       │  │     └─ t1.c1
+       │  └─ `COLUMN`
+       │     └─ `EXPR`
+       │        └─ t2.c1
+       ├─ `FROM`
+       │  └─ `TABLE`
+       │     ├─ table1
+       │     └─ `NAME`
+       │        └─ t1
+       ├─ `JOIN`
+       │  ├─ `TABLE`
+       │  │  ├─ `STATEMENT`
+       │  │  │  └─ `UNION-ALL`
+       │  │  │     ├─ `UNION`
+       │  │  │     │  ├─ `STATEMENT`
+       │  │  │     │  │  ├─ `SELECT`
+       │  │  │     │  │  │  └─ `COLUMN`
+       │  │  │     │  │  │     └─ `EXPR`
+       │  │  │     │  │  │        └─ a
+       │  │  │     │  │  └─ `FROM`
+       │  │  │     │  │     └─ `TABLE`
+       │  │  │     │  │        └─ `NAME`
+       │  │  │     │  │           └─ b
+       │  │  │     │  └─ `STATEMENT`
+       │  │  │     │     ├─ `SELECT`
+       │  │  │     │     │  └─ `COLUMN`
+       │  │  │     │     │     └─ `EXPR`
+       │  │  │     │     │        └─ a
+       │  │  │     │     └─ `FROM`
+       │  │  │     │        └─ `TABLE`
+       │  │  │     │           └─ `NAME`
+       │  │  │     │              └─ b
+       │  │  │     └─ `STATEMENT`
+       │  │  │        ├─ `SELECT`
+       │  │  │        │  └─ `COLUMN`
+       │  │  │        │     └─ `EXPR`
+       │  │  │        │        └─ c
+       │  │  │        └─ `FROM`
+       │  │  │           └─ `TABLE`
+       │  │  │              └─ `NAME`
+       │  │  │                 └─ d
+       │  │  └─ `NAME`
+       │  │     └─ t2
+       │  └─ `ON`
+       │     └─ t2.c1 = t1.c1
+       ├─ `WHERE`
+       │  └─ message in ( 1111 , 112 )
+       └─ `GROUP-BY`
+          ├─ `EXPR`
+          │  └─ tumble ( rowtime , 60 , 'sec' )
+          └─ `EXPR`
+             └─ t1.c1

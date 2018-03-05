@@ -44,10 +44,6 @@ public class Node<T> {
         return parent;
     }
 
-    public void setParent(Node parent) {
-        this.parent = parent;
-    }
-
     public String toString() {
         String t = (this.data == null)? "nil":this.data.toString();
         return t;

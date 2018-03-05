@@ -48,6 +48,7 @@ public class SqlParser {
                 "DROP-TABLE",
                 "DROP-INDEX",
                 //DML
+                "SELECT-STREAM",
                 "LEFT-JOIN RIGHT-JOIN INNER-JOIN OUTER-JOIN",
                 "GROUP-BY ORDER-BY UNION-ALL",
                 "INSERT-INTO",
@@ -82,7 +83,8 @@ public class SqlParser {
         private boolean keyword;
 
         public Token(Token t) {
-            this.sqlTokens = t.sqlTokens;
+            this.sqlTokens = new ArrayList<>();
+            this.sqlTokens.addAll(t.sqlTokens);
             this.keyword = t.keyword;
         }
 
@@ -178,35 +180,25 @@ public class SqlParser {
         return SqlASTBuilder.buildSimpleAST(tokens);
     }
 
+    private static class Interval<T> {
+        private T start;
+        private T stop;
 
-    private static class SqlASTBuilder {
-
-        private static String TOKEN_LEFT_PAREN = "(";
-        private static String TOKEN_RIGHT_PAREN = ")";
-        private static String TOKEN_COMMA = ",";
-        private static String TOKEN_UNION = "`UNION`";
-        private static String TOKEN_ALL = "`ALL`";
-
-        private static String TOKEN_SELECT = "`SELECT`";
-
-
-        private static class Interval<T> {
-            private T start;
-            private T stop;
-
-            public Interval(T start, T stop) {
-                this.start = start;
-                this.stop = stop;
-            }
-
-            @Override
-            public String toString() {
-                return "(" + start + ", " + stop + ")";
-            }
-
+        public Interval(T start, T stop) {
+            this.start = start;
+            this.stop = stop;
         }
 
-        private static List<Interval<Integer>> findAllParenPairs(List<Token> tokens) {
+        @Override
+        public String toString() {
+            return "(" + start + ", " + stop + ")";
+        }
+
+    }
+
+    private static class TokenUtils {
+
+        private static List<Interval<Integer>> findAllParenPairs(List<Token> tokens, String strStart, String strStop) {
 
             List<Interval<Integer>> intervals = new ArrayList<>();
 
@@ -215,11 +207,11 @@ public class SqlParser {
             for (int i = 0; i < tokens.size(); i++) {
 
                 Token token = tokens.get(i);
-                if (token.toString().equals(TOKEN_LEFT_PAREN)) {
+                if (token.toString().equals(strStart)) {
 
                     stack.push(i);
 
-                } else if (token.toString().equals(TOKEN_RIGHT_PAREN)) {
+                } else if (token.toString().equals(strStop)) {
 
                     Integer start = stack.pop();
                     Integer stop = i;
@@ -230,6 +222,19 @@ public class SqlParser {
             return intervals;
         }
 
+    }
+
+    private static class SqlASTBuilder {
+
+        private static String TOKEN_LEFT_PAREN = "(";
+        private static String TOKEN_RIGHT_PAREN = ")";
+        private static String TOKEN_COMMA = ",";
+        private static String TOKEN_UNION = "`UNION`";
+        private static String TOKEN_UNION_ALL = "`UNION-ALL`";
+        private static String TOKEN_ALL = "`ALL`";
+
+        private static String TOKEN_SELECT = "`SELECT`";
+        private static String TOKEN_ORDER = "`ORDER`";
 
         /**
          * 分析嵌套子句，组装Statement对象
@@ -265,7 +270,7 @@ public class SqlParser {
                 }
 
                 if (parenCount == 0) {
-                    if (TOKEN_UNION.equals(s)) {
+                    if (TOKEN_UNION.equals(s) || TOKEN_UNION_ALL.equals(s)) {
                         unionNodePos.add(i);
                         if (TOKEN_ALL.equals(tokens.get(i+1).toString())) {
                             t.append(tokens.get(i+1));
@@ -290,6 +295,13 @@ public class SqlParser {
             }
         }
 
+        /**
+         * 分析Union语句
+         *
+         * @param tokens
+         * @param unionNodePos
+         * @return
+         */
         private static Statement buildNestedStatementWithUnion(List<Token> tokens, List<Integer> unionNodePos) {
 
             Statement statement = new UnionStatement();
@@ -311,7 +323,29 @@ public class SqlParser {
                 if (i < pos.size()-2) statement.addLast(tokens.get(pos.get(i+1)));
             }
 
-            return rebuildLastSelectStatement(statement);
+            statement = rebuildLastSelectStatement(statement);
+
+            //TODO: 处理最后一句的OrderBy、limit
+            Statement lastUnionStatement = (Statement)statement.getChildren().getLast();
+            LinkedList<Node<SqlNode>> lastUnionStatementChildren = lastUnionStatement.getChildren();
+
+            int nOrderBy = -1;
+            for (int i = 0; i < lastUnionStatementChildren.size(); i ++) {
+                Node<SqlNode> t = lastUnionStatementChildren.get(i);
+                if (TOKEN_ORDER.equals(t.toString())) {
+                    nOrderBy = i;
+                    break;
+                }
+            }
+//            for (int i = nOrderBy; i < lastUnionStatementChildren.size(); i ++) {
+//                Node<SqlNode> t = lastUnionStatementChildren.get(i);
+//                statement.addLast(t);
+//            }
+//            for (int i = nOrderBy; i < lastUnionStatementChildren.size(); i ++) {
+//                lastUnionStatementChildren.removeLast();
+//            }
+
+            return statement;
         }
 
         /**
@@ -335,7 +369,7 @@ public class SqlParser {
             //
 
             //找到所有select子句 （注意, 所有的子句都是select语句）
-            List<Interval<Integer>> allSubQueryPairs = findAllParenPairs(tokens).stream()
+            List<Interval<Integer>> allSubQueryPairs = TokenUtils.findAllParenPairs(tokens, TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN).stream()
                     .filter(interval -> TOKEN_SELECT.equals(tokens.get(interval.start + 1).toString()))
                     .collect(Collectors.toList());
 
@@ -471,16 +505,11 @@ public class SqlParser {
                     Token t = (Token) node;
                     if (curKeywordToken != null) {
 
-                        if (nodes.size() > 0 || !curKeywordToken.canAppend(t)) {
-                            buildNode(newStatement, curKeywordToken, nodes);
+                        buildNode(newStatement, curKeywordToken, nodes);
 
-                            //reset nodes and curKeywordToken
-                            nodes = new LinkedList<>();
-                            curKeywordToken = new Token(t);
-
-                        } else {    //合并连续的keywords
-                            curKeywordToken.append(t);
-                        }
+                        //reset nodes and curKeywordToken
+                        nodes = new LinkedList<>();
+                        curKeywordToken = new Token(t);
 
 
                     } else {
@@ -574,7 +603,7 @@ public class SqlParser {
                 curToken = buildTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
-            } else if (keyword.endsWith("-JOIN`")) {
+            } else if (keyword.endsWith("JOIN`")) {
 
                 curToken = buildTableNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
@@ -614,7 +643,6 @@ public class SqlParser {
 
                 curToken = buildUnionNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
-                //TODO: 尚未支持
 
             } else {
 
@@ -799,7 +827,7 @@ public class SqlParser {
         /**
          * 2种情形
          * 1. create table $table_name as ($select_clause) [with data]
-         * 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
+         * TODO: 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
          *
          * $table_name   形如 "a", "qtemp/a"
          * $datatype     形如 "varchar(32)", "int", "decimal(12,3)"。
@@ -1087,9 +1115,39 @@ public class SqlParser {
 
                 tokens.add(new Token(currToken, bKeyword));
             }
+            //合并Keywords
+            //TODO: 怎不支持3+连续keywords合并
+            List<Token> mergedTokens = new ArrayList<>();
+            Token keywordToken = null;
+            for (int i = 0; i < tokens.size(); i ++) {
+
+                Token curToken = tokens.get(i);
+
+                if (curToken.keyword) {
+
+                    if (keywordToken == null) {
+                        keywordToken = new Token(curToken);
+                    } else {
+                        if (keywordToken.canAppend(curToken)) {
+                            keywordToken.append(curToken);
+                        } else {
+                            mergedTokens.add(keywordToken);
+                            keywordToken = new Token(curToken);
+                        }
+                    }
+
+                } else {
+                    if (keywordToken != null) {
+                        mergedTokens.add(keywordToken);
+                        keywordToken = null;
+                    }
+                    mergedTokens.add(curToken);
+                }
+            }
+
 
             //GO
-            Statement statement = buildNestedStatement(tokens);
+            Statement statement = buildNestedStatement(mergedTokens);
             statement = buildNodes(statement);
             return statement;
 

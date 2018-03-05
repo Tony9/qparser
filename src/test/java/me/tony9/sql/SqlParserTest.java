@@ -4,6 +4,9 @@ import junit.framework.Assert;
 import junit.framework.TestCase;
 import me.tony9.util.tree.Node;
 import me.tony9.util.tree.NodeTest;
+import org.apache.calcite.avatica.util.Casing;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -103,16 +106,16 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-//            if (!key.startsWith("[sql-092:")) { continue; }
-//            if ((key.indexOf("union") > -1)) { continue; }
+            if (!key.startsWith("[sql-131:")) { continue; }
+//            if ((key.indexOf("[sql-081:") > -1)) { continue; }
 
             String actual = fn.apply(sql);
 
-            logger.info(String.format("\n%s\n[%s]\n %s\n[%s]",
+            logger.info(String.format("\n%s\n[%s]\n %s\n[%d/%d: %s]",
                     sql.replaceAll("(\r|\n)+", " "),
                     key.substring(1, key.length()-1),
                     actual,
-                    key.substring(1, key.length()-1)));
+                    (i+1), tests.length, key.substring(1, key.length()-1)));
             Assert.assertEquals(expected.toString().trim(), actual.toString().trim());
         }
 
@@ -133,6 +136,61 @@ public class SqlParserTest extends TestCase {
 
     }
 
+    public void test_CalciteParser() {
+
+        runTests("tree", sql -> {
+
+            org.apache.calcite.sql.parser.SqlParser.Config config =  org.apache.calcite.sql.parser.SqlParser.Config.DEFAULT;
+            config = org.apache.calcite.sql.parser.SqlParser.configBuilder().setUnquotedCasing(Casing.UNCHANGED).build();
+
+            logger.info(String.format("\n%s\n", sql));
+            org.apache.calcite.sql.parser.SqlParser sqlParser = org.apache.calcite.sql.parser.SqlParser.create(sql, config);
+            SqlNode query = null;
+            try {
+                query = sqlParser.parseQuery();
+                logger.info(String.format("\n%s\n------------------------", query.toString()));
+            } catch (SqlParseException e) {
+                logger.error(String.format("\nERROR\n"));
+            }
+
+            return "";
+        });
+
+    }
+
+    public void test_数据表1() {
+
+
+        runTests("", sql -> {
+
+            Node node = new SqlParser().parse(sql);
+
+            String tree = node.toTreeString();
+
+            final List<String> tables = new ArrayList<String>();
+
+            node.getAllChildren().stream()
+                    .filter(t -> {
+                        Node n = (Node)t;
+                        return n.toString().equals("`NAME`")
+                                && n.getParent().toString().equals("`TABLE`")
+                                && !n.getParent().getChildren().get(0).toString().equals("`STATEMENT`");
+                    })
+                    .forEach(n -> {
+                        Node t = (Node)n;
+                        Node tableNameNode = (Node)t.getChildren().get(0);
+                        if (!tableNameNode.toString().equals("`STATEMENT`")) {
+                            tables.add(tableNameNode.toString());
+                        }
+                    });
+
+            String actual = tables.toString();
+            actual = actual.substring(1, actual.length()-1);
+            return actual;
+
+        });
+
+    }
 
     public void test_数据表() {
 
