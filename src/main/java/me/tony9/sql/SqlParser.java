@@ -501,11 +501,14 @@ public class SqlParser {
          */
         private static Statement buildSimpleStatementNode(Statement nestedStatement) {
 
+            String node0 = nestedStatement.getChildren().get(0).toString();
 
-            if ("CREATE-TABLE".equals(nestedStatement.getChildren().get(0).toString())) {
-               return buildCreateStatementNode(nestedStatement);
-            } else if ("`INSERT-INTO`".equals(nestedStatement.getChildren().get(0).toString())) {
+            if ("`CREATE-TABLE`".equals(node0)) {
+                return buildCreateStatementNode(nestedStatement);
+            } else if ("`INSERT-INTO`".equals(node0)) {
                 return buildInsertStatementNode(nestedStatement);
+            } else if ("`DELETE`".equals(node0)) {
+                return buildDeleteStatementNode(nestedStatement);
             }
 
             Statement newStatement = new Statement();
@@ -623,12 +626,53 @@ public class SqlParser {
             return newStatement;
         }
 
+
+        private static int findPosition(LinkedList<Node<SqlNode>> nodes, String keyword) {
+
+            boolean bFound = false;
+            int pos = 0;
+            while (pos < nodes.size()) {
+                if (keyword.equals(nodes.get(pos).toString())) {
+                    bFound = true;
+                    break;
+                }
+                pos ++;
+            }
+            return bFound?pos:-1;
+        }
+
+        private static SqlNode buildTableNameNode(LinkedList<Node<SqlNode>> nodes, int posStart, int posStop) {
+
+            SqlNode tableNameNode = new SqlNode("`NAME`");
+            for (int i = posStart; i < posStop; i ++) {
+                tableNameNode.addLast(nodes.get(i));
+            }
+
+            return tableNameNode;
+        }
+
+        private static Expression buildExpressionNode(LinkedList<Node<SqlNode>> nodes, int posStart, int posStop) {
+
+            List<SqlToken> expressionTokens = new ArrayList<>();
+            for (int i = posStart; i < posStop; i ++) {
+                SqlNode node = (SqlNode)nodes.get(i);
+                if (node instanceof Token) {
+                    expressionTokens.addAll(((Token)node).sqlTokens);
+                } else {
+                    throw new RuntimeException(String.format("Invalid node class type '%s'.", node.getClass()));
+                }
+            }
+
+            return new Expression(expressionTokens);
+        }
+
+
         /**
          * 2种情形
          * TODO: 1. `INSERT-INTO` $tableName [($columnName, $clumnName, ...)] `VALUES` ($v, $v, ...), ($v, $v, ...)
          * 2. `INSERT-INTO` $tableName [($columnName, $columnName, ...)] $selectClause
          *
-         * $table_name   形如 "a", "qtemp/a"
+         * $tableName   形如 "a", "qtemp/a"
          *
          * @param insertStatement
          * @return
@@ -644,13 +688,20 @@ public class SqlParser {
                 // case 2. insert...select...
                 //
 
-                int startColumnNamePos = 0;
-                while (startColumnNamePos < nodes.size()) {
-                    if (TOKEN_LEFT_PAREN.equals(nodes.get(startColumnNamePos).toString())) {
-                        startColumnNamePos ++;
-                        break;
-                    }
-                    startColumnNamePos ++;
+                int posTableNameStart, posTableNameStop;
+                int posColumnNameStart, posColumnNameStop;
+                if (TOKEN_RIGHT_PAREN.equals(nodes.get(nodes.size()-2))) {
+                    posColumnNameStart = findPosition(nodes, TOKEN_LEFT_PAREN);
+                    posColumnNameStop = nodes.size()-2;
+
+                    posTableNameStop = posColumnNameStart;
+                    posTableNameStart = 1;
+                } else {
+                    posColumnNameStart = -1;
+                    posColumnNameStop = -1;
+
+                    posTableNameStart = 1;
+                    posTableNameStop = nodes.size()-1;
                 }
 
                 //`INSERT-INTO`
@@ -658,20 +709,20 @@ public class SqlParser {
 
                 SqlNode tableNode = new SqlNode("`TABLE`");
                 //$tableName
-                SqlNode tableNameNode = new SqlNode("`NAME`");
-                for (int i = 1; i < startColumnNamePos-1; i ++) {
-                    tableNameNode.addLast(nodes.get(i));
-                }
+                SqlNode tableNameNode = buildTableNameNode(nodes, posTableNameStart, posTableNameStop);
                 tableNode.addLast(tableNameNode);
                 //$columnName
-                for (int i = startColumnNamePos; i < nodes.size()-1; i += 2) {
-                    SqlNode columnNameNode = new SqlNode("`NAME`");
-                    columnNameNode.addLast(nodes.get(i));
-                    SqlNode columnNode = new SqlNode("`COLUMN`");
-                    columnNode.addLast(columnNameNode);
+                if (posColumnNameStart > -1 && posColumnNameStop > posColumnNameStart) {
+                    for (int i = posColumnNameStart; i < posColumnNameStop; i += 2) {
+                        SqlNode columnNameNode = new SqlNode("`NAME`");
+                        columnNameNode.addLast(nodes.get(i));
+                        SqlNode columnNode = new SqlNode("`COLUMN`");
+                        columnNode.addLast(columnNameNode);
 
-                    tableNode.addLast(columnNode);
+                        tableNode.addLast(columnNode);
+                    }
                 }
+
                 insertIntoNode.addLast(tableNode);
 
                 //$selectClause
@@ -688,6 +739,52 @@ public class SqlParser {
                 //
                 throw new RuntimeException(String.format("Unsupported SQL"));
 
+            }
+
+            return newStatement;
+        }
+
+        /**
+         * 1. `DELETE` [*] `FROM` $tableName `WHERE` $boolExpr
+         *
+         * $tableName   形如 "a", "qtemp/a"
+         *
+         * @param insertStatement
+         * @return
+         */
+        private static Statement buildDeleteStatementNode(Statement insertStatement) {
+
+            Statement newStatement = new Statement();
+
+            LinkedList<Node<SqlNode>> nodes = insertStatement.getChildren();
+
+            //`DELETE`
+            SqlNode deleteNode = (SqlNode)nodes.get(0);
+            newStatement.addLast(deleteNode);
+
+
+            int posFromStart = findPosition(nodes, "`FROM`");
+            int posWhereStart = findPosition(nodes, "`WHERE`");
+            int posFromStop = (posWhereStart == -1)?nodes.size():posWhereStart;
+            int posWhereEnd = nodes.size();
+
+            //`FROM-TABLE-NAME`
+            SqlNode tableNameNode = buildTableNameNode(nodes, posFromStart+1, posFromStop);
+
+            SqlNode tableNode = new SqlNode("`TABLE`");
+            tableNode.addLast(tableNameNode);
+
+            SqlNode fromNode = new SqlNode("`FROM`");
+            fromNode.addLast(tableNode);
+
+            newStatement.addLast(fromNode);
+
+            //`WHERE`
+            if (posWhereStart > -1) {
+                SqlNode whereNode = new SqlNode("`WHERE`");
+                whereNode.addLast(buildExpressionNode(nodes, posWhereStart+1, posWhereEnd));
+
+                newStatement.addLast(whereNode);
             }
 
             return newStatement;
@@ -727,11 +824,6 @@ public class SqlParser {
             } else if ("`SET`".equals(keyword)) {
 
                 curToken = buildSetNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`DELETE`".equals(keyword)) {        ///---DELETE
-
-                curToken = buildDeleteNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
 
             } else if ("`SELECT`".equals(keyword)) {        ///---SELECT
@@ -1015,53 +1107,6 @@ public class SqlParser {
         }
 
         /**
-         *
-         * @param curKeywordToken
-         * @param nodes
-         * @return
-         */
-        private static Token buildInsertIntoNode(Token curKeywordToken, List<SqlNode> nodes) {
-
-            if (!"`STATEMENT`".equals(nodes.get(nodes.size()-1).toString())) {
-                //
-                //TODO: case 1. insert into $table_name ($column_name, $clumn_name, ...) values ($v, $v, ...), ($v, $v, ...)
-                //
-
-                throw new UnsupportedOperationException(String.format("Unsupported Statement"));
-
-            } else {
-                //
-                //case 2. insert into $table_name ($column_name, $clumn_name, ...) $select_clause
-                //
-
-                SqlNode tableNode = new SqlNode("`TABLE`");
-
-                SqlNode tableNameNode = new SqlNode("`NAME`");
-                tableNameNode.addLast(nodes.get(0));
-                tableNode.addLast(tableNameNode);
-
-                for (int i = 2; i < nodes.size()-2; i += 2) {
-                    SqlNode columnNameNode = new SqlNode(("`NAME`"));
-                    columnNameNode.addLast(nodes.get(i));
-
-                    SqlNode columnNode = new SqlNode("`COLUMN`");
-                    columnNode.addLast(columnNameNode);
-
-                    tableNode.addLast(columnNode);
-                }
-
-                curKeywordToken.addLast(tableNode);
-
-
-                curKeywordToken.addLast(nodes.get(nodes.size()-1));
-
-            }
-
-            return curKeywordToken;
-        }
-
-
-        /**
          * 1种情形
          * 1. update $table_name set expr1, expr2 where expr
          *
@@ -1117,21 +1162,6 @@ public class SqlParser {
                 curKeywordToken.addLast(columnNode);
 
             }
-            return curKeywordToken;
-        }
-
-        /**
-         * 1种情形
-         * 1. delete [*] from $table_name where expr
-         *
-         *
-         * @param curKeywordToken
-         * @param nodes
-         * @return
-         */
-        private static Token buildDeleteNode(Token curKeywordToken, List<SqlNode> nodes) {
-
-            //do nothing
             return curKeywordToken;
         }
 

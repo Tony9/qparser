@@ -106,7 +106,7 @@ public class SqlParserTest extends TestCase {
 
             logger.info(String.format("%s", key));
 
-            if (!key.startsWith("[sql-111:")) { continue; }
+            if (!key.startsWith("[sql-150:")) { continue; }
 //            if ((key.indexOf("[sql-081:") > -1)) { continue; }
 
             String actual = fn.apply(sql);
