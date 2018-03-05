@@ -493,7 +493,7 @@ public class SqlParser {
          * - Delete
          * - Update
          * - Insert
-         * - Select
+         * - Select/With..Select
          * ...
          *
          * @param nestedStatement
@@ -509,6 +509,12 @@ public class SqlParser {
                 return buildInsertStatementNode(nestedStatement);
             } else if ("`DELETE`".equals(node0)) {
                 return buildDeleteStatementNode(nestedStatement);
+            } else if ("`UPDATE`".equals(node0)) {
+                return buildUpdateStatementNode(nestedStatement);
+//            } else if ("`SELECT`".equals(node0)) {
+//                return buildSelectStatementNode(nestedStatement);
+//            } else if ("`WITH`".equals(node0)) {
+//                return buildWithSelectStatementNode(nestedStatement);
             }
 
             Statement newStatement = new Statement();
@@ -651,7 +657,7 @@ public class SqlParser {
             return tableNameNode;
         }
 
-        private static Expression buildExpressionNode(LinkedList<Node<SqlNode>> nodes, int posStart, int posStop) {
+        private static <T> Expression buildExpressionNode(List<T> nodes, int posStart, int posStop) {
 
             List<SqlToken> expressionTokens = new ArrayList<>();
             for (int i = posStart; i < posStop; i ++) {
@@ -665,7 +671,6 @@ public class SqlParser {
 
             return new Expression(expressionTokens);
         }
-
 
         /**
          * 2种情形
@@ -690,7 +695,7 @@ public class SqlParser {
 
                 int posTableNameStart, posTableNameStop;
                 int posColumnNameStart, posColumnNameStop;
-                if (TOKEN_RIGHT_PAREN.equals(nodes.get(nodes.size()-2))) {
+                if (TOKEN_RIGHT_PAREN.equals(nodes.get(nodes.size()-2).toString())) {
                     posColumnNameStart = findPosition(nodes, TOKEN_LEFT_PAREN);
                     posColumnNameStop = nodes.size()-2;
 
@@ -713,7 +718,7 @@ public class SqlParser {
                 tableNode.addLast(tableNameNode);
                 //$columnName
                 if (posColumnNameStart > -1 && posColumnNameStop > posColumnNameStart) {
-                    for (int i = posColumnNameStart; i < posColumnNameStop; i += 2) {
+                    for (int i = posColumnNameStart+1; i < posColumnNameStop; i += 2) {
                         SqlNode columnNameNode = new SqlNode("`NAME`");
                         columnNameNode.addLast(nodes.get(i));
                         SqlNode columnNode = new SqlNode("`COLUMN`");
@@ -790,6 +795,75 @@ public class SqlParser {
             return newStatement;
         }
 
+
+        /**
+         * 1. `UPDATE` $tableName `SET` $col1=$expr1, $col2=$expr2 `WHERE` $boolExpr
+         *
+         * $tableName   形如 "a", "qtemp/a"
+         *
+         * @param updateStatement
+         * @return
+         */
+        private static Statement buildUpdateStatementNode(Statement updateStatement) {
+
+            Statement newStatement = new Statement();
+
+            LinkedList<Node<SqlNode>> nodes = updateStatement.getChildren();
+
+            //`UPDATE`
+            SqlNode updateNode = (SqlNode)nodes.get(0);
+            newStatement.addLast(updateNode);
+
+
+            int posSetStart = findPosition(nodes, "`SET`");
+            int posWhereStart = findPosition(nodes, "`WHERE`");
+            int posSetStop = (posWhereStart == -1)?nodes.size():posWhereStart;
+            int posWhereEnd = nodes.size();
+
+            //$tableName
+            SqlNode tableNameNode = buildTableNameNode(nodes, 1, posSetStart);
+
+            SqlNode tableNode = new SqlNode("`TABLE`");
+            tableNode.addLast(tableNameNode);
+
+            updateNode.addLast(tableNode);
+
+            //`SET`
+            SqlNode setNode = new SqlNode("`SET`");
+            List<SqlNode> subNodes = new ArrayList<SqlNode>();
+            for (int i = posSetStart+1; i < posSetStop; i ++) {
+                subNodes.add((SqlNode)nodes.get(i));
+            }
+            List<List<SqlNode>> assignments = splitByComma(subNodes);
+            for (int i = 0; i < assignments.size(); i ++) {
+
+                List<SqlNode> assignment = assignments.get(i);
+
+                SqlNode columnNode = new SqlNode("`COLUMN`");
+
+                SqlNode nameNode = new SqlNode("`NAME`");
+                nameNode.addLast(assignment.get(0));
+                columnNode.addLast(nameNode);
+
+                SqlNode exprNode = new SqlNode("`EXPR`");
+                exprNode.addLast(buildExpressionNode(assignment, 2, assignment.size()));
+                columnNode.addLast(exprNode);
+
+                setNode.addLast(columnNode);
+            }
+            newStatement.addLast(setNode);
+
+            //`WHERE`
+            if (posWhereStart > -1) {
+                SqlNode whereNode = new SqlNode("`WHERE`");
+                whereNode.addLast(buildExpressionNode(nodes, posWhereStart+1, posWhereEnd));
+
+                newStatement.addLast(whereNode);
+            }
+
+            return newStatement;
+        }
+
         /**
          * 遍历指定statement对象的子节点
          * 1. 把SQL关键字后面的节点调整为当前关键字的子节点
@@ -816,17 +890,7 @@ public class SqlParser {
             Token curToken;
             String keyword = curKeywordToken.toString();
 
-            if ("`UPDATE`".equals(keyword)) {        ///---UPDATE
-
-                curToken = buildUpdateNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`SET`".equals(keyword)) {
-
-                curToken = buildSetNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`SELECT`".equals(keyword)) {        ///---SELECT
+            if ("`SELECT`".equals(keyword)) {        ///---SELECT
 
                 curToken = buildColumnNode(curKeywordToken, nodeList);
                 statement.addLast(curToken);
