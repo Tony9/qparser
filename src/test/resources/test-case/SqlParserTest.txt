@@ -1137,13 +1137,45 @@ where a8=4
        └─ `WHERE`
           └─ a8 = 4
 
-
 [sql-100:create-table]
+create    table qtemp/t_xxx as (
+  select #a,substr(b, #start, #end), 'select * from t', d from t
+)with data
+
+[sql-100:create-table:tree]
+ `STATEMENT`
+ └─ `CREATE-TABLE`
+    ├─ `TABLE`
+    │  └─ `NAME`
+    │     ├─ qtemp
+    │     ├─ /
+    │     └─ t_xxx
+    ├─ `STATEMENT`
+    │  ├─ `SELECT`
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ #a
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ substr ( b , #start , #end )
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ 'select * from t'
+    │  │  └─ `COLUMN`
+    │  │     └─ `EXPR`
+    │  │        └─ d
+    │  └─ `FROM`
+    │     └─ `TABLE`
+    │        └─ `NAME`
+    │           └─ t
+    └─ `WITH-DATA`
+
+[sql-102:create-table]
 create    table qtemp/t_xxx as (
   select #a,substr(b, #start, #end), 'select * from t', rank() over(partition by a order by b asc, c desc) as d from t
 )with data
 
-[sql-100:create-table:tree!]
+[sql-102:create-table:tree!]
 `STATEMENT`
  ├─ `CREATE-TABLE`
  │  ├─ `NAME`
@@ -1170,7 +1202,7 @@ create    table qtemp/t_xxx as (
  │              └─ t
  └─ `WITH-DATA`
 
-[sql-101:create-table]
+[sql-105:create-table]
 CREATE TABLE qtemp/t_persons (
     PersonID int,
     LastName varchar(255),
@@ -1179,7 +1211,7 @@ CREATE TABLE qtemp/t_persons (
     City varchar(255)
 )
 
-[sql-101:create-table:tree!]
+[sql-105:create-table:tree!]
 
 
 [sql-110:insert-into]

@@ -4,7 +4,6 @@ import me.tony9.util.tree.Node;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import javax.swing.plaf.nimbus.State;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -511,21 +510,26 @@ public class SqlParser {
                 return buildDeleteStatementNode(nestedStatement);
             } else if ("`UPDATE`".equals(node0)) {
                 return buildUpdateStatementNode(nestedStatement);
-//            } else if ("`SELECT`".equals(node0)) {
-//                return buildSelectStatementNode(nestedStatement);
-//            } else if ("`WITH`".equals(node0)) {
-//                return buildWithSelectStatementNode(nestedStatement);
+            } else if ("`SELECT`".equals(node0)) {
+                return buildQueryStatementNode(nestedStatement);
+            } else if ("`WITH`".equals(node0)) {
+                return buildQueryStatementNode(nestedStatement);
+            } else {
+                throw new RuntimeException("Wrong Statement");
             }
+        }
 
+
+        private static Statement buildQueryStatementNode(Statement queryStatement) {
             Statement newStatement = new Statement();
 
             LinkedList<SqlNode> nodes = new LinkedList<>();
             Token curKeywordToken = null;
             int parenCount = 0;
 
-            for (int i = 0; i < nestedStatement.getChildren().size(); i ++) {
+            for (int i = 0; i < queryStatement.getChildren().size(); i ++) {
 
-                SqlNode node = (SqlNode)nestedStatement.getChildren().get(i);
+                SqlNode node = (SqlNode)queryStatement.getChildren().get(i);
 
                 String s = node.toString();
                 if (TOKEN_LEFT_PAREN.equals(s)) {
@@ -542,7 +546,7 @@ public class SqlParser {
                     Token t = (Token) node;
                     if (curKeywordToken != null) {
 
-                        buildNode(newStatement, curKeywordToken, nodes);
+                        buildQueryNode(newStatement, curKeywordToken, nodes);
 
                         //reset nodes and curKeywordToken
                         nodes = new LinkedList<>();
@@ -558,7 +562,7 @@ public class SqlParser {
             //add remain all
             if (curKeywordToken != null) {
 
-                buildNode(newStatement, curKeywordToken, nodes);
+                buildQueryNode(newStatement, curKeywordToken, nodes);
             }
 
             return newStatement;
@@ -579,54 +583,37 @@ public class SqlParser {
 
             Statement newStatement = new Statement();
 
-            LinkedList<SqlNode> nodes = new LinkedList<>();
-            Token curKeywordToken = null;
-            int parenCount = 0;
+            LinkedList<Node<SqlNode>> nodes = createStatement.getChildren();
 
-            for (int i = 0; i < createStatement.getChildren().size(); i ++) {
+            int posAS = findPosition(nodes, "AS");
+            if (posAS > -1) {
 
-                SqlNode node = (SqlNode)createStatement.getChildren().get(i);
+                //`CREATE-TABLE`
+                SqlNode createTableNode = (SqlNode) nodes.get(0);
 
-                String s = node.toString();
-                if (TOKEN_LEFT_PAREN.equals(s)) {
-                    parenCount ++;
-                } else if (TOKEN_RIGHT_PAREN.equals(s)) {
-                    parenCount --;
+                //$tableName
+                SqlNode tableNode = new SqlNode("`TABLE`");
+                SqlNode tableNameNode = buildTableNameNode(nodes, 1, posAS);
+                tableNode.addLast(tableNameNode);
+
+                createTableNode.addLast(tableNode);
+
+                //$selectClause
+                Statement queryStatement = (Statement) nodes.get(posAS+1);
+                createTableNode.addLast(buildQueryStatementNode(queryStatement));
+
+                //Token after $selectClause
+                for (int i = posAS+2; i < nodes.size(); i ++) {
+                    createTableNode.addLast(nodes.get(i));
                 }
 
-                if (node instanceof Statement) {
-                    Statement subStatement = buildNodes((Statement) node); //递归
-                    nodes.add(subStatement);
-                } else if (node instanceof Token && ((Token) node).keyword
-                        && parenCount == 0) {
+                newStatement.addLast(createTableNode);
 
-                    Token t = (Token) node;
-                    if (curKeywordToken != null) {
-
-                        if ("`CREATE-TABLE`".equals(curKeywordToken.toString())) {
-                            Token token = buildCreateTableNode(curKeywordToken, nodes);
-                            newStatement.addLast(token);
-                        } else if ("`WITH-DATA`".equals(curKeywordToken.toString())) {
-                            newStatement.addLast(curKeywordToken);
-                        } else {
-                            throw new RuntimeException(String.format("Unknown keyword '%s'", curKeywordToken.toString()));
-                        }
-
-                        //reset nodes and curKeywordToken
-                        nodes = new LinkedList<>();
-                        curKeywordToken = new Token(t);
-                    } else {
-                        curKeywordToken = new Token(t);
-                    }
-                } else {
-                    nodes.add(node);
-                }
-            }
-
-            //add remain all
-            if (curKeywordToken != null) {
-
-                buildNode(newStatement, curKeywordToken, nodes);
+            } else {
+                //
+                // other cases
+                //
+                throw new RuntimeException(String.format("Unsupported SQL"));
             }
 
             return newStatement;
@@ -638,7 +625,7 @@ public class SqlParser {
             boolean bFound = false;
             int pos = 0;
             while (pos < nodes.size()) {
-                if (keyword.equals(nodes.get(pos).toString())) {
+                if (keyword.equals(nodes.get(pos).toString().toUpperCase())) {
                     bFound = true;
                     break;
                 }
@@ -885,7 +872,7 @@ public class SqlParser {
 
         }
 
-        private static void buildNode(Statement statement, Token curKeywordToken, List<SqlNode> nodeList) {
+        private static void buildQueryNode(Statement statement, Token curKeywordToken, List<SqlNode> nodeList) {
 
             Token curToken;
             String keyword = curKeywordToken.toString();
@@ -940,11 +927,6 @@ public class SqlParser {
             } else if ("`LIMIT`".equals(keyword)) {
 
                 //TODO: 分页尚未支持，不同数据库的语句差别较大
-
-            } else if ("`UNION`".equals(keyword) || "`UNION-ALL`".equals(keyword)) {
-
-                curToken = buildUnionNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
 
             } else {
 
@@ -1377,6 +1359,10 @@ public class SqlParser {
                     }
                     mergedTokens.add(curToken);
                 }
+            }
+
+            if (keywordToken != null) {
+                mergedTokens.add(keywordToken);
             }
 
 
