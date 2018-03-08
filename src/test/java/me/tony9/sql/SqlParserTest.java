@@ -104,10 +104,11 @@ public class SqlParserTest extends TestCase {
             String sql = tests[i][1];
             String expected = tests[i][2];
 
-            logger.info(String.format("%s", key));
 
-//            if (!key.startsWith("[sql-081:")) { continue; }
-            if ((key.indexOf("with-query") > -1)) { continue; }
+//            if (!key.startsWith("[sql-150:")) { continue; }
+//            if ((key.indexOf("with-query") > -1)) { continue; }
+
+            logger.info(String.format("%s", key));
 
             String actual = fn.apply(sql);
 

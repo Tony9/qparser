@@ -754,9 +754,9 @@ union
 select a,b,c from t1
 
 [sql-081:with-query:tree]
- `STATEMENT`
+`STATEMENT`
  └─ `WITH`
-    ├─ `WITH-SELECT`
+    ├─ `SUB-QUERY`
     │  ├─ `NAME`
     │  │  └─ t_x
     │  └─ `STATEMENT`
@@ -783,7 +783,7 @@ select a,b,c from t1
     │              └─ `TABLE`
     │                 └─ `NAME`
     │                    └─ t3
-    ├─ `WITH-SELECT`
+    ├─ `SUB-QUERY`
     │  ├─ `NAME`
     │  │  └─ t_y
     │  └─ `STATEMENT`
@@ -797,27 +797,42 @@ select a,b,c from t1
     │        └─ `TABLE`
     │           └─ `NAME`
     │              └─ t2
-    └─ `STATEMENT`
-       ├─ `SELECT`
-       │  ├─ `COLUMN`
-       │  │  └─ `EXPR`
-       │  │     └─ a
-       │  ├─ `COLUMN`
-       │  │  └─ `EXPR`
-       │  │     └─ b
-       │  └─ `COLUMN`
-       │     └─ `EXPR`
-       │        └─ c
-       └─ `FROM`
-          ├─ `TABLE`
-          │  └─ `NAME`
-          │     └─ t_x
-          ├─ `TABLE`
-          │  └─ `NAME`
-          │     └─ t_y
-          └─ `TABLE`
-             └─ `NAME`
-                └─ t1
+    └─ `LAST-QUERY`
+       └─ `STATEMENT`
+          └─ `UNION`
+             ├─ `STATEMENT`
+             │  ├─ `SELECT`
+             │  │  ├─ `COLUMN`
+             │  │  │  └─ `EXPR`
+             │  │  │     └─ a
+             │  │  ├─ `COLUMN`
+             │  │  │  └─ `EXPR`
+             │  │  │     └─ b
+             │  │  └─ `COLUMN`
+             │  │     └─ `EXPR`
+             │  │        └─ c
+             │  └─ `FROM`
+             │     ├─ `TABLE`
+             │     │  └─ `NAME`
+             │     │     └─ t_x
+             │     └─ `TABLE`
+             │        └─ `NAME`
+             │           └─ t_y
+             └─ `STATEMENT`
+                ├─ `SELECT`
+                │  ├─ `COLUMN`
+                │  │  └─ `EXPR`
+                │  │     └─ a
+                │  ├─ `COLUMN`
+                │  │  └─ `EXPR`
+                │  │     └─ b
+                │  └─ `COLUMN`
+                │     └─ `EXPR`
+                │        └─ c
+                └─ `FROM`
+                   └─ `TABLE`
+                      └─ `NAME`
+                         └─ t1
 
 [sql-090:union]
 select a from t1 where a>1

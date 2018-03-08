@@ -190,7 +190,7 @@ public class SqlParser {
         private static String TOKEN_RIGHT_PAREN = ")";
 
 
-        private static List<Interval<Integer>> findAllParenPairs(List<Token> tokens, String strStart, String strStop) {
+        private static <T> List<Interval<Integer>> findAllParenPairs(List<T> tokens, String strStart, String strStop) {
 
             List<Interval<Integer>> intervals = new ArrayList<>();
 
@@ -198,7 +198,7 @@ public class SqlParser {
 
             for (int i = 0; i < tokens.size(); i++) {
 
-                Token token = tokens.get(i);
+                T token = tokens.get(i);
                 if (token.toString().equals(strStart)) {
 
                     stack.push(i);
@@ -261,6 +261,7 @@ public class SqlParser {
         private static String TOKEN_UNION_ALL = "`UNION-ALL`";
 
         private static String TOKEN_SELECT = "`SELECT`";
+        private static String TOKEN_WITH = "`WITH`";
 
 
         /**
@@ -281,38 +282,43 @@ public class SqlParser {
          * @param tokens
          * @return
          */
-        public static Statement buildNestedStatement(List<Token> tokens) {
+        public static Statement buildNestedStatement(List<SqlNode> tokens) {
 
-            //计算Union/Union-All 位置
-            List<Token> newTokens = new ArrayList<>();
-            List<Integer> unionNodePos = new ArrayList<>();
-            int parenCount = 0;
-            for (int i = 0; i < tokens.size(); i ++) {
-                Token t = tokens.get(i);
-                String s = t.toString();
-                if (TOKEN_LEFT_PAREN.equals(s)) {
-                    parenCount ++;
-                } else if (TOKEN_RIGHT_PAREN.equals(s)) {
-                    parenCount --;
-                }
+            if (TOKEN_WITH.equals(tokens.get(0).toString())) {
+                return buildNestedStatementWithoutUnion(tokens);
+            } else {
+                //计算Union/Union-All 位置
+                List<SqlNode> newTokens = new ArrayList<>();
+                List<Integer> unionNodePos = new ArrayList<>();
 
-                if (parenCount == 0) {
-                    if (TOKEN_UNION.equals(s) || TOKEN_UNION_ALL.equals(s)) {
-                        unionNodePos.add(i);
-                        newTokens.add(t);
+                int parenCount = 0;
+                for (int i = 0; i < tokens.size(); i ++) {
+                    SqlNode t = tokens.get(i);
+                    String s = t.toString();
+                    if (TOKEN_LEFT_PAREN.equals(s)) {
+                        parenCount ++;
+                    } else if (TOKEN_RIGHT_PAREN.equals(s)) {
+                        parenCount --;
+                    }
+
+                    if (parenCount == 0) {
+                        if (TOKEN_UNION.equals(s) || TOKEN_UNION_ALL.equals(s)) {
+                            unionNodePos.add(i);
+                            newTokens.add(t);
+                        } else {
+                            newTokens.add(t);
+                        }
                     } else {
                         newTokens.add(t);
                     }
-                } else {
-                    newTokens.add(t);
                 }
-            }
 
-            //return
-            if (unionNodePos.size() > 0) {
-                return buildNestedStatementWithUnion(newTokens, unionNodePos);
-            } else {
-                return buildNestedStatementWithoutUnion(newTokens);
+                //return
+                if (unionNodePos.size() > 0) {
+                    return buildNestedStatementWithUnion(newTokens, unionNodePos);
+                } else {
+                    return buildNestedStatementWithoutUnion(newTokens);
+                }
             }
         }
 
@@ -323,7 +329,7 @@ public class SqlParser {
          * @param unionNodePos
          * @return
          */
-        private static Statement buildNestedStatementWithUnion(List<Token> tokens, List<Integer> unionNodePos) {
+        private static Statement buildNestedStatementWithUnion(List<SqlNode> tokens, List<Integer> unionNodePos) {
 
             Statement statement = new UnionStatement();
             List<Integer> pos = new ArrayList<>();
@@ -337,7 +343,7 @@ public class SqlParser {
                 int end = pos.get(i+1);
                 if (end-1 < tokens.size() && TOKEN_RIGHT_PAREN.equals(tokens.get(end-1).toString())) end --;
 
-                List<Token> subTokens = new ArrayList<>();
+                List<SqlNode> subTokens = new ArrayList<>();
                 for (int k = start; k < end; k ++) subTokens.add(tokens.get(k));
 
                 statement.addLast(buildNestedStatement(subTokens));
@@ -365,7 +371,7 @@ public class SqlParser {
          * @param tokens
          * @return
          */
-        private static Statement buildNestedStatementWithoutUnion(List<Token> tokens) {
+        private static Statement buildNestedStatementWithoutUnion(List<SqlNode> tokens) {
 
             //
             //找到第一层嵌套语句
@@ -391,13 +397,12 @@ public class SqlParser {
             //
             Statement statement = new Statement();
 
-            int parenCount = 0;
             for (int i = 0; i < tokens.size(); i ++) {
-                Token t = tokens.get(i);
+                SqlNode t = tokens.get(i);
 
                 if (map.containsKey(i)) {
                     Interval<Integer> interval = map.get(i);
-                    List<Token> newTokens = new ArrayList<>();
+                    List<SqlNode> newTokens = new ArrayList<>();
                     for (int k = i+1; k < interval.stop; k ++) newTokens.add(tokens.get(k));
                     statement.addLast(buildNestedStatement(newTokens));
 
@@ -424,9 +429,17 @@ public class SqlParser {
         private static Statement rebuildLastSelectStatement(Statement s) {
 
             LinkedList<Node<SqlNode>> nodes = s.getChildren();
-            int lastSelectIndex = nodes.size()-1;
-            for (; lastSelectIndex > -1; lastSelectIndex --) {
-                if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
+//            int lastSelectIndex = nodes.size()-1;
+//            for (; lastSelectIndex > -1; lastSelectIndex --) {
+//                if ("`SELECT`".equals(nodes.get(lastSelectIndex).toString())) {
+//                    break;
+//                }
+//            }
+
+            int lastSelectIndex = -1;
+            for (int i = 0; i < nodes.size(); i ++) {
+                if (TOKEN_SELECT.equals(nodes.get(i).toString())) {
+                    lastSelectIndex = i;
                     break;
                 }
             }
@@ -437,11 +450,12 @@ public class SqlParser {
                     newStatement.addLast(nodes.get(i));
                 }
 
-                Statement lastSelectStatement = new Statement();
+                List<SqlNode> subTokens = new ArrayList<>();
+
                 for (int i = lastSelectIndex; i < nodes.size(); i ++) {
-                    lastSelectStatement.addLast(nodes.get(i));
+                    subTokens.add((SqlNode) nodes.get(i));
                 }
-                newStatement.addLast(lastSelectStatement);
+                newStatement.addLast(buildNestedStatement(subTokens));
 
                 return newStatement;
             } else {
@@ -1305,7 +1319,7 @@ public class SqlParser {
             //
             //合并Keywords
             //
-            List<Token> mergedTokens = new ArrayList<>();
+            List<SqlNode> mergedTokens = new ArrayList<>();
             Token keywordToken = null;
             for (int i = 0; i < tokens.size(); i ++) {
 
