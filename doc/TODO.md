@@ -23,3 +23,5 @@ mvn install -Dmaven.test.skip=true
     算术表达式、函数
     特殊表达式: case..when, like, in, between
 
+## Reference
+- MySQL 5.7: https://dev.mysql.com/doc/refman/5.7/en/create-table.html

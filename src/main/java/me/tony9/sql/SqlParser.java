@@ -4,7 +4,9 @@ import me.tony9.util.tree.Node;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import javax.swing.plaf.nimbus.State;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class SqlParser {
@@ -16,6 +18,7 @@ public class SqlParser {
         String[] statements = new String[] {
                 //DDL
                 "CREATE TABLE",
+                // "IF NOT EXISTS",
                 "CREATE TABLE WITH DATA",
                 "CREATE INDEX ON",
                 "DROP TABLE",
@@ -28,7 +31,10 @@ public class SqlParser {
                 "INSERT INTO SELECT FROM",
                 "UPDATE SET WHERE",
                 "DELETE FROM WHERE",
-                "OVER PARTITION BY"
+                "OVER PARTITION BY",
+                //逻辑表达式
+//                "AND OR NOT"
+
         };
 
         KEYWORDS = new HashSet<>();
@@ -44,9 +50,9 @@ public class SqlParser {
     static {
         String[] multipleKeywords = new String[] {
                 //DDL
-                "CREATE-TABLE WITH-DATA",
+                "CREATE-TABLE IF-NOT-EXISTS WITH-DATA",
                 "CREATE-INDEX",
-                "DROP-TABLE",
+                "DROP-TABLE IF-EXISTS",
                 "DROP-INDEX",
                 //DML
                 "SELECT-STREAM",
@@ -107,25 +113,6 @@ public class SqlParser {
                 str.append(this.sqlTokens.get(i).getText());
             }
             return this.keyword? "`"+str.toString().toUpperCase()+"`":str.toString();
-        }
-
-        public boolean canAppend(Token t) {
-
-            if (!this.keyword || !t.keyword) return false;
-
-            StringBuffer str = new StringBuffer();
-            for (int i = 0; i < this.sqlTokens.size(); i ++) {
-                if (i > 0) str.append("-");
-                str.append(this.sqlTokens.get(i).getText());
-            }
-            str.append("-");
-            for (int i = 0; i < t.sqlTokens.size(); i ++) {
-                if (i > 0) str.append("-");
-                str.append(t.sqlTokens.get(i).getText());
-            }
-
-            return MULTIPLE_KEYWORDS.contains(str.toString().toUpperCase());
-
         }
 
         public void append(Token t) {
@@ -199,6 +186,10 @@ public class SqlParser {
 
     private static class TokenUtils {
 
+        private static String TOKEN_LEFT_PAREN = "(";
+        private static String TOKEN_RIGHT_PAREN = ")";
+
+
         private static List<Interval<Integer>> findAllParenPairs(List<Token> tokens, String strStart, String strStop) {
 
             List<Interval<Integer>> intervals = new ArrayList<>();
@@ -223,6 +214,43 @@ public class SqlParser {
             return intervals;
         }
 
+        private static int findPosition(LinkedList<Node<SqlNode>> nodes, int startIndex, int stopIndex, Predicate<Node<SqlNode>> predicate) {
+
+            List<Integer> posList = findPositions(nodes, startIndex, stopIndex, predicate);
+            return posList.isEmpty()?-1:posList.get(0);
+        }
+
+        private static List<Integer> findPositions(LinkedList<Node<SqlNode>> nodes, int startIndex, int stopIndex, Predicate<Node<SqlNode>> predicate) {
+
+            startIndex = (startIndex>0)?startIndex:0;
+            stopIndex = (stopIndex<nodes.size())?stopIndex:nodes.size();
+
+            List<Integer> posList = new ArrayList<>();
+
+            int parenCount = 0;
+
+            for (int i = startIndex; i < stopIndex; i ++) {
+                Node<SqlNode> n = nodes.get(i);
+                if (TOKEN_LEFT_PAREN.equals(n.toString())) {
+                    parenCount ++;
+                } else if (TOKEN_RIGHT_PAREN.equals(n.toString())) {
+                    parenCount--;
+                }
+                if (parenCount == 0 && predicate.test(n)) {
+                    posList.add(i);
+                }
+            }
+            return posList;
+        }
+
+        private static int findPosition(LinkedList<Node<SqlNode>> nodes, String keyword) {
+
+            return findPosition(nodes, 0, nodes.size(), n -> keyword.equals(n.toString().toUpperCase()));
+        }
+
+        private static List<Integer> findPositions(LinkedList<Node<SqlNode>> nodes, Predicate<Node<SqlNode>> predicate) {
+            return findPositions(nodes, 0, nodes.size(), predicate);
+        }
     }
 
     private static class SqlASTBuilder {
@@ -232,10 +260,8 @@ public class SqlParser {
         private static String TOKEN_COMMA = ",";
         private static String TOKEN_UNION = "`UNION`";
         private static String TOKEN_UNION_ALL = "`UNION-ALL`";
-        private static String TOKEN_ALL = "`ALL`";
 
         private static String TOKEN_SELECT = "`SELECT`";
-        private static String TOKEN_ORDER = "`ORDER`";
 
         /**
          * 分析嵌套子句，组装Statement对象
@@ -273,13 +299,7 @@ public class SqlParser {
                 if (parenCount == 0) {
                     if (TOKEN_UNION.equals(s) || TOKEN_UNION_ALL.equals(s)) {
                         unionNodePos.add(i);
-                        if (TOKEN_ALL.equals(tokens.get(i+1).toString())) {
-                            t.append(tokens.get(i+1));
-                            newTokens.add(t);
-                            i += 1;
-                        } else {
-                            newTokens.add(t);
-                        }
+                        newTokens.add(t);
                     } else {
                         newTokens.add(t);
                     }
@@ -327,24 +347,6 @@ public class SqlParser {
             statement = rebuildLastSelectStatement(statement);
 
             //TODO: 处理最后一句的OrderBy、limit
-            Statement lastUnionStatement = (Statement)statement.getChildren().getLast();
-            LinkedList<Node<SqlNode>> lastUnionStatementChildren = lastUnionStatement.getChildren();
-
-            int nOrderBy = -1;
-            for (int i = 0; i < lastUnionStatementChildren.size(); i ++) {
-                Node<SqlNode> t = lastUnionStatementChildren.get(i);
-                if (TOKEN_ORDER.equals(t.toString())) {
-                    nOrderBy = i;
-                    break;
-                }
-            }
-//            for (int i = nOrderBy; i < lastUnionStatementChildren.size(); i ++) {
-//                Node<SqlNode> t = lastUnionStatementChildren.get(i);
-//                statement.addLast(t);
-//            }
-//            for (int i = nOrderBy; i < lastUnionStatementChildren.size(); i ++) {
-//                lastUnionStatementChildren.removeLast();
-//            }
 
             return statement;
         }
@@ -452,7 +454,7 @@ public class SqlParser {
          * @param unionStatement
          * @return
          */
-        private static Statement buildUnionStatementNode(UnionStatement unionStatement) {
+        private static Statement buildUnionQueryStatementNode(UnionStatement unionStatement) {
 
             LinkedList<Node<SqlNode>> children = unionStatement.getChildren();
 
@@ -464,12 +466,12 @@ public class SqlParser {
             }
             while (stack.size() >= 3) {
                 Node s1 = stack.pop();
-                if (s1 instanceof Statement) s1 = buildNodes((Statement)s1);
+                if (s1 instanceof Statement) s1 = buildQueryStatementNode((Statement)s1);
 
                 Node n = stack.pop();
 
                 Statement s2 = (Statement)stack.pop();
-                if (s2 instanceof Statement) s2 = buildNodes((Statement)s2);
+                if (s2 instanceof Statement) s2 = buildQueryStatementNode((Statement)s2);
 
                 n.addLast(s1);
                 n.addLast(s2);
@@ -498,74 +500,227 @@ public class SqlParser {
          * @param nestedStatement
          * @return
          */
-        private static Statement buildSimpleStatementNode(Statement nestedStatement) {
+        private static Statement buildNodes(Statement nestedStatement) {
 
-            String node0 = nestedStatement.getChildren().get(0).toString();
+            if (nestedStatement instanceof UnionStatement) {
 
-            if ("`CREATE-TABLE`".equals(node0)) {
-                return buildCreateStatementNode(nestedStatement);
-            } else if ("`INSERT-INTO`".equals(node0)) {
-                return buildInsertStatementNode(nestedStatement);
-            } else if ("`DELETE`".equals(node0)) {
-                return buildDeleteStatementNode(nestedStatement);
-            } else if ("`UPDATE`".equals(node0)) {
-                return buildUpdateStatementNode(nestedStatement);
-            } else if ("`SELECT`".equals(node0)) {
-                return buildQueryStatementNode(nestedStatement);
-            } else if ("`WITH`".equals(node0)) {
-                return buildQueryStatementNode(nestedStatement);
+                return buildUnionQueryStatementNode((UnionStatement) nestedStatement);
+
             } else {
-                throw new RuntimeException("Wrong Statement");
+                String node0 = nestedStatement.getChildren().get(0).toString();
+
+                if ("`CREATE-TABLE`".equals(node0)) {
+                    return buildCreateStatementNode(nestedStatement);
+                } else if ("`INSERT-INTO`".equals(node0)) {
+                    return buildInsertStatementNode(nestedStatement);
+                } else if ("`DELETE`".equals(node0)) {
+                    return buildDeleteStatementNode(nestedStatement);
+                } else if ("`UPDATE`".equals(node0)) {
+                    return buildUpdateStatementNode(nestedStatement);
+                } else if ("`SELECT`".equals(node0) || "`WITH`".equals(node0)) {
+                    return buildQueryStatementNode(nestedStatement);
+                } else {
+                    throw new RuntimeException(String.format("Wrong Statement: %s", node0));
+                }
             }
+
+
+        }
+
+        private static List<SqlNode> subList(LinkedList<Node<SqlNode>> nodes, int startIndex, int stopIndex) {
+            List<SqlNode> sub = new ArrayList<>();
+            for (int i = startIndex; i < stopIndex; i ++) {
+                sub.add((SqlNode) nodes.get(i));
+            }
+            return sub;
         }
 
 
         private static Statement buildQueryStatementNode(Statement queryStatement) {
+
+            if (queryStatement instanceof UnionStatement) {
+                return buildUnionQueryStatementNode((UnionStatement) queryStatement);
+            } else {
+
+                String node0 = queryStatement.getChildren().get(0).toString();
+                if ("`WITH`".equals(node0)) {
+                    return buildWithQueryStatementNode(queryStatement);
+                } else {
+                    return buildSimpleQueryStatementNode(queryStatement);
+                }
+            }
+        }
+
+        /**
+         * 1. `WITH` [
+         *      $queryName `AS` (
+         *          $selectClause
+         *      )
+         *     ]+
+         *     $lastSelectClause
+         *
+         * @param queryStatement
+         * @return
+         */
+        private static Statement buildWithQueryStatementNode(Statement queryStatement) {
+
             Statement newStatement = new Statement();
 
-            LinkedList<SqlNode> nodes = new LinkedList<>();
-            Token curKeywordToken = null;
-            int parenCount = 0;
+            LinkedList<Node<SqlNode>> nodes = queryStatement.getChildren();
 
-            for (int i = 0; i < queryStatement.getChildren().size(); i ++) {
+            //`WITH`
+            SqlNode withNode = (SqlNode) nodes.get(0);
+            newStatement.addLast(withNode);
 
-                SqlNode node = (SqlNode)queryStatement.getChildren().get(i);
+            //$queryName `AS` ($selectClause)
+            List<List<SqlNode>> subQuerys = splitByComma(subList(nodes, 1, nodes.size()-1));
+            for (List<SqlNode> subQuery: subQuerys) {
+                SqlNode subQueryNameNode = new SqlNode("`NAME`");
+                subQueryNameNode.addLast(subQuery.get(0));
 
-                String s = node.toString();
-                if (TOKEN_LEFT_PAREN.equals(s)) {
-                    parenCount ++;
-                } else if (TOKEN_RIGHT_PAREN.equals(s)) {
-                    parenCount --;
-                }
+                SqlNode subQueryNode = new SqlNode("`SUB-QUERY`");
+                subQueryNode.addLast(subQueryNameNode);
+                subQueryNode.addLast(buildQueryStatementNode((Statement) subQuery.get(2)));
 
-                if (node instanceof Statement) {
-                    Statement subStatement = buildNodes((Statement) node); //递归
-                    nodes.add(subStatement);
-                } else if (node instanceof Token && ((Token) node).keyword && parenCount == 0) {
-
-                    Token t = (Token) node;
-                    if (curKeywordToken != null) {
-
-                        buildQueryNode(newStatement, curKeywordToken, nodes);
-
-                        //reset nodes and curKeywordToken
-                        nodes = new LinkedList<>();
-                        curKeywordToken = new Token(t);
-                    } else {
-                        curKeywordToken = new Token(t);
-                    }
-                } else {
-                    nodes.add(node);
-                }
+                withNode.addLast(subQueryNode);
             }
 
-            //add remain all
-            if (curKeywordToken != null) {
+            //$lastSelectClause
+            SqlNode lastQueryNode = new SqlNode("`LAST-QUERY`");
+            lastQueryNode.addLast(buildQueryStatementNode((Statement) nodes.getLast()));
+            withNode.addLast(lastQueryNode);
 
-                buildQueryNode(newStatement, curKeywordToken, nodes);
-            }
-
+            //return
             return newStatement;
+        }
+
+        /**
+         * 1.   `SELECT` $columns
+         *      `FROM` $tables
+         *      [`*JOIN` $table `ON` $joinConditions]*
+         *      [`WHERE` $whereConditions]{0,1}
+         *      [`GROUP-BY` $groupExprs]{0,1}
+         *      [`HAVING` $havingConditions]{0,1}
+         *      [`ORDER-BY` $orderExprs]{0,1}
+         *      [`LIMIT` $start,$limit]{0,1}
+         *      [`FOR-UPDATE` | `LOCK-IN-SHARE-MODE`]
+         *
+         * 2. `WITH` [$queryName `AS` ($selectClause)]+ $selectClause
+         *
+         * @param queryStatement
+         * @return
+         */
+        private static Statement buildSimpleQueryStatementNode(Statement queryStatement) {
+
+            Statement newStatement = new Statement();
+
+            LinkedList<Node<SqlNode>> nodes = queryStatement.getChildren();
+
+            int posSelectStart = 0;
+            int posFromStart = TokenUtils.findPosition(nodes, "`FROM`");
+            List<Integer> posJoinStartList = TokenUtils.findPositions(nodes, n -> n.toString().toUpperCase().endsWith("JOIN`"));
+            int posWhereStart = TokenUtils.findPosition(nodes, "`WHERE`");
+            int posGroupByStart = TokenUtils.findPosition(nodes, "`GROUP-BY`");
+            int posHavingStart = TokenUtils.findPosition(nodes, "`HAVING`");
+            int posOrderByStart = TokenUtils.findPosition(nodes, "`ORDER-BY`");
+            int posLimitStart = TokenUtils.findPosition(nodes, "`LIMIT`");
+
+            List<Integer> posKeywords = new ArrayList<>();
+            posKeywords.add(posSelectStart);
+            posKeywords.add(posFromStart);
+            posKeywords.addAll(posJoinStartList);
+            posKeywords.add(posWhereStart);
+            posKeywords.add(posGroupByStart);
+            posKeywords.add(posHavingStart);
+            posKeywords.add(posOrderByStart);
+            posKeywords.add(posLimitStart);
+            posKeywords = posKeywords.stream().filter(n -> n > -1).collect(Collectors.toList());
+            posKeywords.add(nodes.size());
+
+            int posSelectStop = posKeywords.stream().filter(n -> n > posSelectStart).min(Integer::compareTo).get();
+            int posFromStop = posKeywords.stream().filter(n -> n > posFromStart).min(Integer::compareTo).get();
+            List<Integer> posJoinStopList = new ArrayList<>();
+            for (Integer posJoinStart: posJoinStartList) {
+                posJoinStopList.add(posKeywords.stream().filter(n -> n > posJoinStart).min(Integer::compareTo).get());
+            }
+            int posWhereStop = posKeywords.stream().filter(n -> n > posWhereStart).min(Integer::compareTo).get();
+            int posGroupByStop = posKeywords.stream().filter(n -> n > posGroupByStart).min(Integer::compareTo).get();
+            int posHavingStop = posKeywords.stream().filter(n -> n > posHavingStart).min(Integer::compareTo).get();
+            int posOrderByStop = posKeywords.stream().filter(n -> n > posOrderByStart).min(Integer::compareTo).get();
+            int posLimitStop = posKeywords.stream().filter(n -> n > posLimitStart).min(Integer::compareTo).get();
+
+            //`SELECT` $columns
+            SqlNode selectNode = (SqlNode) nodes.get(0);
+
+            List<SqlNode> columnNodes = buildColumnNodes(subList(nodes, posSelectStart+1, posSelectStop));
+            selectNode.addAll(columnNodes);
+
+            newStatement.addLast(selectNode);
+
+            //`FROM` $tables
+            SqlNode fromNode = (SqlNode) nodes.get(posFromStart);
+
+            List<SqlNode> tableNodes = buildTableNodes(subList(nodes, posFromStart+1, posFromStop));
+            fromNode.addAll(tableNodes);
+
+            newStatement.addLast(fromNode);
+
+            //`*JOIN` $table `ON` $joinCondition
+            for (int i = 0; i < posJoinStartList.size(); i ++) {
+                int posJoinStart = posJoinStartList.get(i);
+                int posJoinStop = posJoinStopList.get(i);
+                int posOnStart = TokenUtils.findPosition(nodes, posJoinStart, posJoinStop, n -> "`ON`".equals(n.toString().toUpperCase()));
+                int posOnStop = posJoinStop;
+                posJoinStop = posOnStart;
+
+                SqlNode joinNode = (SqlNode) nodes.get(posJoinStart);
+                joinNode.addAll(buildTableNodes(subList(nodes, posJoinStart+1, posJoinStop)));
+
+                SqlNode joinOnNode = (SqlNode) nodes.get(posOnStart);
+                joinOnNode.addLast(buildExpressionNode(nodes, posOnStart+1, posOnStop));
+                joinNode.addLast(joinOnNode);
+
+                newStatement.addLast(joinNode);
+            }
+
+
+            //`WHERE` $whereCondition
+            if (posWhereStart > -1) {
+                SqlNode whereNode = (SqlNode) nodes.get(posWhereStart);
+                whereNode.addLast(buildExpressionNode(nodes, posWhereStart+1, posWhereStop));
+
+                newStatement.addLast(whereNode);
+            }
+
+            //`GROUP-BY` $groupExprs
+            if (posGroupByStart > -1) {
+                SqlNode groupByNode = (SqlNode) nodes.get(posGroupByStart);
+                groupByNode.addAll(buildGroupByNodes(subList(nodes, posGroupByStart+1, posGroupByStop)));
+
+                newStatement.addLast(groupByNode);
+            }
+
+            //`HAVING` $havingConditions
+            if (posHavingStart > -1) {
+                SqlNode havingNode = (SqlNode) nodes.get(posHavingStart);
+                havingNode.addLast(buildExpressionNode(nodes, posHavingStart+1, posHavingStop));
+
+                newStatement.addLast(havingNode);
+            }
+
+            //`ORDER-BY` $orderExprs
+            if (posOrderByStart > -1) {
+                SqlNode orderByNode = (SqlNode) nodes.get(posOrderByStart);
+                orderByNode.addAll(buildOrderExprNodes(subList(nodes, posOrderByStart+1, posOrderByStop)));
+
+                newStatement.addLast(orderByNode);
+            }
+
+            //TODO: `LIMIT`
+
+            //return
+            return newStatement;
+
         }
 
         /**
@@ -585,7 +740,7 @@ public class SqlParser {
 
             LinkedList<Node<SqlNode>> nodes = createStatement.getChildren();
 
-            int posAS = findPosition(nodes, "AS");
+            int posAS = TokenUtils.findPosition(nodes, "AS");
             if (posAS > -1) {
 
                 //`CREATE-TABLE`
@@ -617,21 +772,6 @@ public class SqlParser {
             }
 
             return newStatement;
-        }
-
-
-        private static int findPosition(LinkedList<Node<SqlNode>> nodes, String keyword) {
-
-            boolean bFound = false;
-            int pos = 0;
-            while (pos < nodes.size()) {
-                if (keyword.equals(nodes.get(pos).toString().toUpperCase())) {
-                    bFound = true;
-                    break;
-                }
-                pos ++;
-            }
-            return bFound?pos:-1;
         }
 
         private static SqlNode buildTableNameNode(LinkedList<Node<SqlNode>> nodes, int posStart, int posStop) {
@@ -683,7 +823,13 @@ public class SqlParser {
                 int posTableNameStart, posTableNameStop;
                 int posColumnNameStart, posColumnNameStop;
                 if (TOKEN_RIGHT_PAREN.equals(nodes.get(nodes.size()-2).toString())) {
-                    posColumnNameStart = findPosition(nodes, TOKEN_LEFT_PAREN);
+                    posColumnNameStart = -1;
+                    for (int i = 0; i < nodes.size(); i ++) {
+                        if (TOKEN_LEFT_PAREN.equals(nodes.get(i).toString())) {
+                            posColumnNameStart = i;
+                            break;
+                        }
+                    }
                     posColumnNameStop = nodes.size()-2;
 
                     posTableNameStop = posColumnNameStart;
@@ -719,7 +865,7 @@ public class SqlParser {
 
                 //$selectClause
                 Statement statement = (Statement)nodes.getLast();
-                insertIntoNode.addLast(buildNodes(statement));
+                insertIntoNode.addLast(buildQueryStatementNode(statement));
 
                 //over
                 newStatement.addLast(insertIntoNode);
@@ -755,8 +901,8 @@ public class SqlParser {
             newStatement.addLast(deleteNode);
 
 
-            int posFromStart = findPosition(nodes, "`FROM`");
-            int posWhereStart = findPosition(nodes, "`WHERE`");
+            int posFromStart = TokenUtils.findPosition(nodes, "`FROM`");
+            int posWhereStart = TokenUtils.findPosition(nodes, "`WHERE`");
             int posFromStop = (posWhereStart == -1)?nodes.size():posWhereStart;
             int posWhereEnd = nodes.size();
 
@@ -802,8 +948,8 @@ public class SqlParser {
             newStatement.addLast(updateNode);
 
 
-            int posSetStart = findPosition(nodes, "`SET`");
-            int posWhereStart = findPosition(nodes, "`WHERE`");
+            int posSetStart = TokenUtils.findPosition(nodes, "`SET`");
+            int posWhereStart = TokenUtils.findPosition(nodes, "`WHERE`");
             int posSetStop = (posWhereStart == -1)?nodes.size():posWhereStart;
             int posWhereEnd = nodes.size();
 
@@ -851,94 +997,6 @@ public class SqlParser {
             return newStatement;
         }
 
-        /**
-         * 遍历指定statement对象的子节点
-         * 1. 把SQL关键字后面的节点调整为当前关键字的子节点
-         * 2. 合并同级Token之间的字符
-         *
-         * 注意，必须传入Nested Statement。
-         *
-         * @param nestedStatement
-         * @return
-         */
-        private static Statement buildNodes(Statement nestedStatement) {
-
-
-            if (nestedStatement instanceof UnionStatement) {
-                return buildUnionStatementNode((UnionStatement) nestedStatement);
-            } else {
-                return buildSimpleStatementNode(nestedStatement);
-            }
-
-        }
-
-        private static void buildQueryNode(Statement statement, Token curKeywordToken, List<SqlNode> nodeList) {
-
-            Token curToken;
-            String keyword = curKeywordToken.toString();
-
-            if ("`SELECT`".equals(keyword)) {        ///---SELECT
-
-                curToken = buildColumnNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`WITH`".equals(keyword)) {
-
-                curToken = buildWithNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`FROM`".equals(keyword)) {
-
-                curToken = buildTableNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if (keyword.endsWith("JOIN`")) {
-
-                curToken = buildTableNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`ON`".equals(keyword)) {
-
-                curToken = buildConditionNode(curKeywordToken, nodeList);
-                //把`ON`节点移到之前的`-JOIN`节点，作为`-JOIN`的最后一个子节点
-                LinkedList<Node<SqlNode>> nodes = statement.getChildren();
-                nodes.get(nodes.size() - 1).addLast(curToken);
-
-            } else if ("`WHERE`".equals(keyword)) {
-
-                curToken = buildConditionNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`GROUP-BY`".equals(keyword)) {
-
-                curToken = buildGroupByNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`HAVING`".equals(keyword)) {
-
-                curToken = buildConditionNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`ORDER-BY`".equals(keyword)) {
-
-                curToken = buildOrderByNode(curKeywordToken, nodeList);
-                statement.addLast(curToken);
-
-            } else if ("`LIMIT`".equals(keyword)) {
-
-                //TODO: 分页尚未支持，不同数据库的语句差别较大
-
-            } else {
-
-                //TODO: 这里异常可以取消，只记录warning日志
-
-                String msg = String.format("Unsupported Keywords '%s'. \n%s\n%s",
-                        keyword, statement.toTreeString(), nodeList);
-                throw new RuntimeException(msg);
-
-            }
-
-        }
 
         /**
          *
@@ -983,11 +1041,12 @@ public class SqlParser {
          * 2. "expr as name"
          * TODO: 3. "expr name" 尚不支持
          *
-         * @param curKeywordToken
          * @param allNodes
          * @return
          */
-        private static Token buildColumnNode(Token curKeywordToken, List<SqlNode> allNodes) {
+        private static List<SqlNode> buildColumnNodes(List<SqlNode> allNodes) {
+
+            List<SqlNode> columnNodes = new ArrayList<>();
 
             List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
@@ -1024,9 +1083,9 @@ public class SqlParser {
                 }
 
                 //append ColumnNode
-                curKeywordToken.addLast(columnNode);
+                columnNodes.add(columnNode);
             }
-            return curKeywordToken;
+            return columnNodes;
         }
 
         /**
@@ -1071,29 +1130,43 @@ public class SqlParser {
          * 2. "statment as name"
          * 3. "statment name"
          *
-         * @param curKeywordToken
          * @param allNodes
          * @return
          */
-        private static Token buildTableNode(Token curKeywordToken, List<SqlNode> allNodes) {
+        private static List<SqlNode> buildTableNodes(List<SqlNode> allNodes) {
+
+            List<SqlNode> tableNodes = new ArrayList<>();
 
             List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
             for (List<SqlNode> nodes: nodeList) {
+
                 SqlNode tableNode = new SqlNode("`TABLE`");
 
+                SqlNode node0 = nodes.get(0);
+
                 if (nodes.size() == 1) {
-                    if ("`STATEMENT`".equals(nodes.get(0).toString())) {
-                        tableNode.addLast(nodes.get(0));
+
+                    if (node0 instanceof Statement) {
+                        Statement statement = (Statement) node0;
+                        tableNode.addLast(buildQueryStatementNode(statement));
                     } else {
                         //NameNode
                         SqlNode nameNode = new SqlNode("`NAME`");
                         nameNode.addLast(nodes.get(0));
                         tableNode.addLast(nameNode);
                     }
+
                 } else if (nodes.size() == 2 || nodes.size() == 3) {
-                    //StatementNode
-                    tableNode.addLast(nodes.get(0));
+                    if (node0 instanceof Statement) {
+                        Statement statement = (Statement) node0;
+                        tableNode.addLast(buildQueryStatementNode(statement));
+                    } else {
+                        //NameNode
+                        SqlNode nameNode = new SqlNode("`EXPR`");
+                        nameNode.addLast(nodes.get(0));
+                        tableNode.addLast(nameNode);
+                    }
 
                     //NameNode
                     SqlNode nameNode = new SqlNode("`NAME`");
@@ -1103,9 +1176,9 @@ public class SqlParser {
                     throw new RuntimeException(String.format("Invalid sql statement '%s'.", nodes.toString()));
                 }
 
-                curKeywordToken.addLast(tableNode);
+                tableNodes.add(tableNode);
             }
-            return curKeywordToken;
+            return tableNodes;
         }
 
         /**
@@ -1215,11 +1288,12 @@ public class SqlParser {
          * 1种情形
          * 1. group by expr, expr, ...
          *
-         * @param curKeywordToken
          * @param allNodes
          * @return
          */
-        private static Token buildGroupByNode(Token curKeywordToken, List<SqlNode> allNodes) {
+        private static List<SqlNode> buildGroupByNodes(List<SqlNode> allNodes) {
+
+            List<SqlNode> groupByNodes = new ArrayList<>();
 
             List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
@@ -1237,20 +1311,21 @@ public class SqlParser {
                 exprNode.addLast(new Expression(expressionTokens));
 
                 //append ColumnNode
-                curKeywordToken.addLast(exprNode);
+                groupByNodes.add(exprNode);
             }
-            return curKeywordToken;
+            return groupByNodes;
         }
 
         /**
          * 1种情形
          * 1. order by expr [asc|desc], expr [asc|desc], ...
          *
-         * @param curKeywordToken
          * @param allNodes
          * @return
          */
-        private static Token buildOrderByNode(Token curKeywordToken, List<SqlNode> allNodes) {
+        private static List<SqlNode> buildOrderExprNodes(List<SqlNode> allNodes) {
+
+            List<SqlNode> orderExprs = new ArrayList<>();
 
             List<List<SqlNode>> nodeList = splitByComma(allNodes);
 
@@ -1268,10 +1343,11 @@ public class SqlParser {
                 exprNode.addLast(new Expression(expressionTokens));
 
                 //append ColumnNode
-                curKeywordToken.addLast(exprNode);
+                orderExprs.add(exprNode);
             }
-            return curKeywordToken;
+            return orderExprs;
         }
+
         /**
          * 按逗号, 分隔nodes数组
          *       `(a+1) as a, b, f(x,g(y,z)) as c`
@@ -1280,17 +1356,17 @@ public class SqlParser {
          * @param allNodes
          * @return
          */
-        private static List<List<SqlNode>> splitByComma(List<SqlNode> allNodes) {
+        private static List<List<SqlNode>> splitByComma(List<SqlNode> allNodes, int startIndex, int stopIndex) {
 
-            if (allNodes == null || allNodes.size() == 0) return null;
+//            if (allNodes == null || allNodes.size() == 0) return null;
 
             List<List<SqlNode>> tokensList = new ArrayList<>();
 
             int parenCount = 0;
 
             List<SqlNode> tokens = new ArrayList<>();
-            for (SqlNode n: allNodes) {
-
+            for (int i = startIndex; i < stopIndex; i ++) {
+                SqlNode n = allNodes.get(i);
                 if (TOKEN_LEFT_PAREN.equals(n.toString())) {
                     parenCount ++;
                     tokens.add(n);
@@ -1315,6 +1391,11 @@ public class SqlParser {
             return tokensList;
         }
 
+
+        private static List<List<SqlNode>> splitByComma(List<SqlNode> allNodes) {
+            return splitByComma(allNodes, 0, allNodes.size());
+        }
+
         /**
          *
          * @param sqlTokens
@@ -1322,7 +1403,9 @@ public class SqlParser {
          */
         public static Node buildSimpleAST(List<SqlToken> sqlTokens) {
 
+            //
             //更新Keywords
+            //
             List<Token> tokens = new ArrayList<>();
             for (int i = 0; i < sqlTokens.size(); i ++) {
                 SqlToken currToken = sqlTokens.get(i);
@@ -1331,8 +1414,10 @@ public class SqlParser {
 
                 tokens.add(new Token(currToken, bKeyword));
             }
+
+            //
             //合并Keywords
-            //TODO: 怎不支持3+连续keywords合并
+            //
             List<Token> mergedTokens = new ArrayList<>();
             Token keywordToken = null;
             for (int i = 0; i < tokens.size(); i ++) {
@@ -1344,7 +1429,7 @@ public class SqlParser {
                     if (keywordToken == null) {
                         keywordToken = new Token(curToken);
                     } else {
-                        if (keywordToken.canAppend(curToken)) {
+                        if (canAppend(keywordToken, curToken)) {
                             keywordToken.append(curToken);
                         } else {
                             mergedTokens.add(keywordToken);
@@ -1365,11 +1450,46 @@ public class SqlParser {
                 mergedTokens.add(keywordToken);
             }
 
-
             //GO
             Statement statement = buildNestedStatement(mergedTokens);
             statement = buildNodes(statement);
             return statement;
+
+        }
+
+
+        /**
+         * TODO: 对3+个连续keywords合并，算法需要优化 (准确性、性能)
+         * 场景：
+         * 1. 对于MySQL，支持一些特别的合并关键字，比如"`IF-NOT-EXISTS`", "`IF-EXISTS`"
+         *
+         * @param prev
+         * @param next
+         * @return
+         */
+        private static boolean canAppend(Token prev, Token next) {
+
+            if (!prev.keyword || !next.keyword) return false;
+
+            StringBuffer str = new StringBuffer();
+            for (int i = 0; i < prev.sqlTokens.size(); i ++) {
+                if (i > 0) str.append("-");
+                str.append(prev.sqlTokens.get(i).getText());
+            }
+            str.append("-");
+            for (int i = 0; i < next.sqlTokens.size(); i ++) {
+                if (i > 0) str.append("-");
+                str.append(next.sqlTokens.get(i).getText());
+            }
+
+            boolean canAppend = false;
+            for (String keywords: MULTIPLE_KEYWORDS) {
+                if (keywords.startsWith(str.toString().toUpperCase())) {
+                    canAppend = true;
+                    break;
+                }
+            }
+            return canAppend;
 
         }
     }

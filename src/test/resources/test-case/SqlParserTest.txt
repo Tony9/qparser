@@ -687,7 +687,7 @@ a, b, c
 [sql-080:with-query:tree]
 `STATEMENT`
  └─ `WITH`
-    ├─ `WITH-SELECT`
+    ├─ `SUB-QUERY`
     │  ├─ `NAME`
     │  │  └─ t_x
     │  └─ `STATEMENT`
@@ -701,7 +701,7 @@ a, b, c
     │        └─ `TABLE`
     │           └─ `NAME`
     │              └─ t1
-    ├─ `WITH-SELECT`
+    ├─ `SUB-QUERY`
     │  ├─ `NAME`
     │  │  └─ t_y
     │  └─ `STATEMENT`
@@ -715,27 +715,28 @@ a, b, c
     │        └─ `TABLE`
     │           └─ `NAME`
     │              └─ t2
-    └─ `STATEMENT`
-       ├─ `SELECT`
-       │  ├─ `COLUMN`
-       │  │  └─ `EXPR`
-       │  │     └─ a
-       │  ├─ `COLUMN`
-       │  │  └─ `EXPR`
-       │  │     └─ b
-       │  └─ `COLUMN`
-       │     └─ `EXPR`
-       │        └─ c
-       └─ `FROM`
-          ├─ `TABLE`
-          │  └─ `NAME`
-          │     └─ t_x
-          ├─ `TABLE`
-          │  └─ `NAME`
-          │     └─ t_y
-          └─ `TABLE`
-             └─ `NAME`
-                └─ t1
+    └─ `LAST-QUERY`
+       └─ `STATEMENT`
+          ├─ `SELECT`
+          │  ├─ `COLUMN`
+          │  │  └─ `EXPR`
+          │  │     └─ a
+          │  ├─ `COLUMN`
+          │  │  └─ `EXPR`
+          │  │     └─ b
+          │  └─ `COLUMN`
+          │     └─ `EXPR`
+          │        └─ c
+          └─ `FROM`
+             ├─ `TABLE`
+             │  └─ `NAME`
+             │     └─ t_x
+             ├─ `TABLE`
+             │  └─ `NAME`
+             │     └─ t_y
+             └─ `TABLE`
+                └─ `NAME`
+                   └─ t1
 
 
 [sql-081:with-query]
@@ -748,9 +749,11 @@ t_x as (
 t_y as (
   select b+f(x,y) as b from t2
 )
-select a,b,c from t_x,t_y,t1
+select a,b,c from t_x,t_y
+union
+select a,b,c from t1
 
-[sql-081:with-query:tree]
+[sql-081:with-query:tree!]
  `STATEMENT`
  └─ `WITH`
     ├─ `WITH-SELECT`
@@ -1138,7 +1141,7 @@ where a8=4
           └─ a8 = 4
 
 [sql-100:create-table]
-create    table qtemp/t_xxx as (
+create    table /*if not exists*/ qtemp/t_xxx as (
   select #a,substr(b, #start, #end), 'select * from t', d from t
 )with data
 
@@ -1546,7 +1549,8 @@ group by tumble(rowtime, 60, 'sec'), t1.c1
        │        └─ t2.c1
        ├─ `FROM`
        │  └─ `TABLE`
-       │     ├─ table1
+       │     ├─ `EXPR`
+       │     │  └─ table1
        │     └─ `NAME`
        │        └─ t1
        ├─ `JOIN`
