@@ -753,7 +753,7 @@ select a,b,c from t_x,t_y
 union
 select a,b,c from t1
 
-[sql-081:with-query:tree!]
+[sql-081:with-query:tree]
  `STATEMENT`
  └─ `WITH`
     ├─ `WITH-SELECT`
@@ -1178,32 +1178,35 @@ create    table qtemp/t_xxx as (
   select #a,substr(b, #start, #end), 'select * from t', rank() over(partition by a order by b asc, c desc) as d from t
 )with data
 
-[sql-102:create-table:tree!]
+[sql-102:create-table:tree]
 `STATEMENT`
- ├─ `CREATE-TABLE`
- │  ├─ `NAME`
- │  │  ├─ qtemp
- │  │  ├─ /
- │  │  └─ t_xxx
- │  └─ `STATEMENT`
- │     ├─ `SELECT`
- │     │  ├─ `COLUMN`
- │     │  │  └─ `EXPR`
- │     │  │     └─ #a
- │     │  ├─ `COLUMN`
- │     │  │  └─ `EXPR`
- │     │  │     └─ substr ( b , #start , #end )
- │     │  ├─ `COLUMN`
- │     │  │  └─ `EXPR`
- │     │  │     └─ 'select * from t'
- │     │  └─ `COLUMN`
- │     │     └─ `EXPR`
- │     │        └─ rank ( a partition b )
- │     └─ `FROM`
- │        └─ `TABLE`
- │           └─ `NAME`
- │              └─ t
- └─ `WITH-DATA`
+ └─ `CREATE-TABLE`
+    ├─ `TABLE`
+    │  └─ `NAME`
+    │     ├─ qtemp
+    │     ├─ /
+    │     └─ t_xxx
+    ├─ `STATEMENT`
+    │  ├─ `SELECT`
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ #a
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ substr ( b , #start , #end )
+    │  │  ├─ `COLUMN`
+    │  │  │  └─ `EXPR`
+    │  │  │     └─ 'select * from t'
+    │  │  └─ `COLUMN`
+    │  │     ├─ `EXPR`
+    │  │     │  └─ rank ( ) over ( partition by a order by b asc , c desc )
+    │  │     └─ `NAME`
+    │  │        └─ d
+    │  └─ `FROM`
+    │     └─ `TABLE`
+    │        └─ `NAME`
+    │           └─ t
+    └─ `WITH-DATA`
 
 [sql-105:create-table]
 CREATE TABLE qtemp/t_persons (
@@ -1505,7 +1508,27 @@ SELECT STREAM rowtime,
   SUM(units) OVER (PARTITION BY FLOOR(rowtime TO HOUR)) AS unitsSinceTopOfHour
 FROM Orders
 
-[sql-145:window-function:tree!]
+[sql-145:window-function:tree]
+`STATEMENT`
+ ├─ `SELECT`
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ STREAM rowtime
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ productId
+ │  ├─ `COLUMN`
+ │  │  └─ `EXPR`
+ │  │     └─ units
+ │  └─ `COLUMN`
+ │     ├─ `EXPR`
+ │     │  └─ SUM ( units ) OVER ( PARTITION BY FLOOR ( rowtime TO HOUR ) )
+ │     └─ `NAME`
+ │        └─ unitsSinceTopOfHour
+ └─ `FROM`
+    └─ `TABLE`
+       └─ `NAME`
+          └─ Orders
 
 [sql-150:flink]
 insert into table3

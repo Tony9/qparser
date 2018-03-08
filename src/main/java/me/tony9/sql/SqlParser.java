@@ -253,15 +253,15 @@ public class SqlParser {
         }
     }
 
-    private static class SqlASTBuilder {
+    private static class StatementBuilder {
 
         private static String TOKEN_LEFT_PAREN = "(";
         private static String TOKEN_RIGHT_PAREN = ")";
-        private static String TOKEN_COMMA = ",";
         private static String TOKEN_UNION = "`UNION`";
         private static String TOKEN_UNION_ALL = "`UNION-ALL`";
 
         private static String TOKEN_SELECT = "`SELECT`";
+
 
         /**
          * 分析嵌套子句，组装Statement对象
@@ -281,7 +281,7 @@ public class SqlParser {
          * @param tokens
          * @return
          */
-        private static Statement buildNestedStatement(List<Token> tokens) {
+        public static Statement buildNestedStatement(List<Token> tokens) {
 
             //计算Union/Union-All 位置
             List<Token> newTokens = new ArrayList<>();
@@ -448,6 +448,13 @@ public class SqlParser {
                 return s;
             }
         }
+    }
+
+    private static class SqlASTBuilder {
+
+        private static String TOKEN_LEFT_PAREN = "(";
+        private static String TOKEN_RIGHT_PAREN = ")";
+        private static String TOKEN_COMMA = ",";
 
         /**
          * 处理 Union 语句
@@ -997,44 +1004,6 @@ public class SqlParser {
             return newStatement;
         }
 
-
-        /**
-         *
-         * @param curKeywordToken
-         * @param nodes
-         * @return
-         */
-        private static Token buildConditionNode(Token curKeywordToken, List<SqlNode> nodes) {
-
-            List<SqlToken> expressionTokens = new ArrayList<>();
-
-            int index = 0;
-            for (; index < nodes.size(); index ++) {
-                SqlNode node = nodes.get(index);
-                if (node instanceof Token) {
-                    expressionTokens.addAll(((Token)node).sqlTokens);
-                } else {
-                    throw new RuntimeException(String.format("Invalid node class type '%s'.", node.getClass()));
-                }
-            }
-
-            //append ConidtionNode
-            curKeywordToken.addLast(new Expression(expressionTokens));
-            return curKeywordToken;
-        }
-
-        /**
-         *
-         * @param curKeywordToken
-         * @param nodes
-         * @return
-         */
-        private static Token buildUnionNode(Token curKeywordToken, List<SqlNode> nodes) {
-
-            curKeywordToken.addAll(nodes);
-            return curKeywordToken;
-        }
-
         /**
          * 3种情形
          * 1. "expr"
@@ -1086,42 +1055,6 @@ public class SqlParser {
                 columnNodes.add(columnNode);
             }
             return columnNodes;
-        }
-
-        /**
-         * 1种情形
-         * 1. with a as (select ...), b as (select ...) select ...
-         *
-         * @param curKeywordToken
-         * @param allNodes
-         * @return
-         */
-        private static Token buildWithNode(Token curKeywordToken, List<SqlNode> allNodes) {
-
-            List<List<SqlNode>> nodeList = splitByComma(allNodes);
-
-            for (List<SqlNode> nodes: nodeList) {
-
-                assert nodes.size() == 3 || nodes.size() == 4;
-
-                //nodes: "name AS statement"
-                SqlNode withSelectNode = new SqlNode("`WITH-SELECT`");
-
-                SqlNode nameNode = new SqlNode("`NAME`");
-                nameNode.addLast(nodes.get(0));
-                withSelectNode.addLast(nameNode);
-
-                withSelectNode.addLast(nodes.get(2));
-
-                //append withSelectNode
-                curKeywordToken.addLast(withSelectNode);
-
-                //last select clause
-                if (nodes.size() == 4) {
-                    curKeywordToken.addLast(nodes.get(3));
-                }
-            }
-            return curKeywordToken;
         }
 
         /**
@@ -1179,50 +1112,6 @@ public class SqlParser {
                 tableNodes.add(tableNode);
             }
             return tableNodes;
-        }
-
-        /**
-         * 2种情形
-         * 1. create table $table_name as ($select_clause) [with data]
-         * TODO: 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
-         *
-         * $table_name   形如 "a", "qtemp/a"
-         * $datatype     形如 "varchar(32)", "int", "decimal(12,3)"。
-         *  其它属性包括"NOT NULL", "PRIMARY KEY", "DEFAULT $value"，举例: "int NOT NULL PRIMARY KEY DEFAULT 1"
-         *
-         *
-         * @param curKeywordToken
-         * @param nodes
-         * @return
-         */
-        private static Token buildCreateTableNode(Token curKeywordToken, List<SqlNode> nodes) {
-
-            if (nodes.size() >= 3 && "AS".equalsIgnoreCase(nodes.get(nodes.size()-2).toString())) {
-                //
-                //case 1. create table $table_name as ($select_clause) [with data]
-                //
-
-                //NameNode
-                //TODO: ["qtemp", "/", "t_xxx"] => "qtemp/t_xxx"
-                SqlNode nameNode = new SqlNode("`NAME`");
-                for (int i = 0; i < nodes.size()-2; i ++) {
-                    nameNode.addLast(nodes.get(i));
-                }
-                curKeywordToken.addLast(nameNode);
-
-                //StatementNode
-                curKeywordToken.addLast(nodes.get(nodes.size()-1));
-
-            } else {
-                //
-                //TODO: case 2. create table $table_name as ($column_name $datatype, $column_name $datatype, ...)
-                //
-
-                throw new UnsupportedOperationException(String.format("Unsupported Statement"));
-
-            }
-
-            return curKeywordToken;
         }
 
         /**
@@ -1358,8 +1247,6 @@ public class SqlParser {
          */
         private static List<List<SqlNode>> splitByComma(List<SqlNode> allNodes, int startIndex, int stopIndex) {
 
-//            if (allNodes == null || allNodes.size() == 0) return null;
-
             List<List<SqlNode>> tokensList = new ArrayList<>();
 
             int parenCount = 0;
@@ -1451,7 +1338,7 @@ public class SqlParser {
             }
 
             //GO
-            Statement statement = buildNestedStatement(mergedTokens);
+            Statement statement = StatementBuilder.buildNestedStatement(mergedTokens);
             statement = buildNodes(statement);
             return statement;
 
